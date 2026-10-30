@@ -1,3 +1,4 @@
+import json
 import time
 from pathlib import Path
 
@@ -299,3 +300,65 @@ def test_rig_frames_are_the_same_every_time_unless_finished(session, hero):
     t = run(lambda task: session.generate(task, "a7", seed=1, finish=True))
     assert t.state == "completed", t.error
     assert session.state()["finished"] is True
+
+
+def test_one_rig_drawing_is_redrawn_and_the_other_kept(session, hero):
+    session.set_character(str(hero))
+    assert run(lambda task: session.make_rig(task, seed=2)).state == "completed"
+    folder = session.rig_dir / session.character.key
+    body = (folder / "rig.png").read_bytes()
+    t = run(lambda task: session.make_rig(task, seed=7, part="hand"))
+    assert t.state == "completed", t.error
+    assert (folder / "rig.png").read_bytes() == body and session.rig.seed == 2
+    info = json.loads((folder / "rig.json").read_text(encoding="utf-8"))
+    assert info["seed"] == 2 and info["hand_seed"] == 7
+
+
+def test_the_owner_edits_a_rig_drawing_in_their_own_editor(session, hero):
+    session.set_character(str(hero))
+    assert run(lambda task: session.make_rig(task, seed=2)).state == "completed"
+    folder = session.rig_dir / session.character.key
+    body = (folder / "rig.png").read_bytes()
+    with pytest.raises(AppError) as e:
+        session.reload_rig_edits()
+    assert e.value.code == "rig_edit_missing"
+
+    r = session.rig_edit_file("rig")
+    assert Path(r["file"]).is_file() and r["state"]["rig"]["editing"] == ["rig"]
+    img = Image.open(r["file"]).convert("RGBA")
+    a = np.array(img)
+    a[a[..., 3] > 0, 0] = 255                             # the owner repaints the drawing
+    Image.fromarray(a, "RGBA").save(r["file"])
+    st = session.reload_rig_edits()
+    assert st["rig"] is not None and (folder / "rig.png").read_bytes() != body
+    assert session.rig_edit_file("rig")["file"] == r["file"]          # the copy being edited is kept
+
+    img.resize((img.width // 2, img.height // 2)).save(r["file"])     # cropped or resized: refused, rig kept
+    with pytest.raises(AppError) as e:
+        session.reload_rig_edits()
+    assert e.value.code == "rig_edit_size" and session.rig is not None
+
+    flat = Image.new("RGB", img.size, (255, 255, 255))   # an editor that drops transparency
+    flat.paste(img, mask=img.getchannel("A"))
+    flat.save(r["file"])
+    session.reload_rig_edits()
+    assert np.array(Image.open(folder / "rig.png"))[0, 0, 3] == 0
+
+    Image.new("RGBA", img.size, (0, 0, 0, 0)).save(r["file"])       # nothing left to build from: old one back
+    before = (folder / "rig.png").read_bytes()
+    with pytest.raises(AppError) as e:
+        session.reload_rig_edits()
+    assert e.value.code == "rig_edit_failed"
+    assert (folder / "rig.png").read_bytes() == before and session.rig is not None
+
+    assert run(lambda task: session.make_rig(task, seed=9, part="rig")).state == "completed"
+    assert not Path(r["file"]).exists() and session.state()["rig"]["editing"] == []
+
+
+def test_key_background_only_clears_the_background_touching_the_edges():
+    from animgen.imaging import key_background
+    a = np.full((60, 60, 4), 255, np.uint8)
+    a[10:50, 10:50, :3] = 0
+    a[25:35, 25:35, :3] = 255                              # white inside the figure stays
+    out = np.array(key_background(Image.fromarray(a, "RGBA")))
+    assert out[0, 0, 3] == 0 and out[30, 30, 3] == 255 and out[15, 15, 3] == 255

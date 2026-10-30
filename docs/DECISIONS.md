@@ -267,6 +267,16 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
 - Hanging-part toggles sit in step 2, not in the skeleton editor as first proposed: the parts are detected from the
   rig, which does not exist yet when the skeleton is confirmed. Turned-off parts stay as drawn.
 - The app no longer uses the per-frame diffusion path; it stays in the backend for dev scripts (phase0).
+- Owner's questions on the rig step (2026-10-31), owner agreed my recommendation A+B:
+  - Each drawing is captioned with what it gives (the spread pose: arms, legs, cape; the hand image: only the open
+    hand; head and torso always from the owner's image).
+  - A: each drawing is redrawn on its own (POST /rig {part}); a good body is never lost to fix the hand.
+  - B: "Sửa…" copies a drawing (facing as the owner's character) to data/rigs/<key>/rig_edit.png or hand_edit.png
+    and opens it in the owner's editor (Windows "edit" verb, else the default app); "Nạp hình đã sửa" rebuilds the
+    rig. Same size required; a picture saved without transparency gets the edge-connected background keyed out;
+    a drawing that lost over 75% of its pixels or does not build is refused and the old one kept. A redraw deletes
+    the copy of the old drawing.
+  - Not built: picking parts from earlier draws (C) and a no-AI fallback (D), until the owner finds them needed.
 
 ## Not done on purpose
 

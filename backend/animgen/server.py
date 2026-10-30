@@ -13,7 +13,10 @@ Routes (all JSON):
   GET  /state                          -> session state (frames, previews, candidates, ...)
   POST /character {path, facing?, name?}
   POST /character/skeleton {points}
-  POST /rig {seed?}                    -> {task}   (the AI draws the character's rig and hand images)
+  POST /rig {seed?, part?}             -> {task}   (the AI draws the character's rig and hand images;
+                                        part 'rig' or 'hand': only that one)
+  POST /rig/edit {part}                -> {file, state}  (a copy of one drawing for the owner's own editor)
+  POST /rig/reload                     -> state    (the rig rebuilt from the edited drawings)
   POST /rig/hanging {name, on: bool}   -> state    (a cape, skirt or hair swings or stays as drawn)
   POST /generate {animation, grip?: bool, seed?, finish?: bool} -> {task}
                                        (grip: hands closed, where the animation leaves it open;
@@ -107,8 +110,18 @@ class App:
                 if s.require_confirmed_skeleton and not s.character.skeleton_confirmed:
                     raise AppError("skeleton_unconfirmed")
                 seed = body.get("seed")
-                t = self.runner.start("rig", lambda task: s.make_rig(task, int(seed) if seed is not None else None))
+                part = body.get("part")
+                if part not in (None, "rig", "hand"):
+                    raise AppError("unknown_part")
+                if part is not None and s.rig is None:
+                    raise AppError("rig_missing")
+                t = self.runner.start("rig", lambda task: s.make_rig(task, int(seed) if seed is not None else None,
+                                                                     part))
                 return 200, {"task": t.to_json()}
+            if parts == ["rig", "edit"]:
+                return 200, s.rig_edit_file(_req(body, "part", str))
+            if parts == ["rig", "reload"]:
+                return 200, s.reload_rig_edits()
             if parts == ["rig", "hanging"]:
                 on = body.get("on")
                 if not isinstance(on, bool):

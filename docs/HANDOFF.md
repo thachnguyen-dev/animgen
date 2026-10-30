@@ -93,3 +93,5 @@ PowerShell scripts.
 
 - Step 2 "Khung nhân vật" in the app (POST /rig, /rig/hanging; /generate takes `finish`). Real-engine check on the
   knight: rig 133 s, A7 8 frames 3 s, one finished frame 23 s. Published to C:/AnimGen for the owner to test.
+- Then per-drawing redraw and owner editing (see DECISIONS.md): knight hand-only redraw 97 s (body kept), edit
+  reload 2.7 s, A7 8/8 after the edit.

@@ -108,6 +108,14 @@ public sealed class RigInfo
     public string? View { get; set; }                   // the assembled character, swinging parts tinted
     public string? HandView { get; set; }               // the open-hand drawing
     public List<HangingInfo> Hanging { get; set; } = new();
+    public List<string> Editing { get; set; } = new();  // drawings with a copy out for the owner's editor (rig | hand)
+}
+
+/// <summary>A rig drawing copied out for the owner's own paint program.</summary>
+public sealed class EditReply
+{
+    public string File { get; set; } = "";
+    public SessionState? State { get; set; }
 }
 
 public sealed class SessionState

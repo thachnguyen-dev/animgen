@@ -163,18 +163,39 @@
                         <StackPanel>
                             <TextBlock Style="{StaticResource TextTitle}" Text="2. Khung nhân vật"/>
                             <Button Content="{Binding RigButtonText}" Command="{Binding MakeRigCommand}" HorizontalAlignment="Left"/>
+                            <!-- Each drawing says which parts it gives, and is redrawn or edited on its own (owner, 2026-10-31) -->
                             <UniformGrid Columns="2" Visibility="{Binding HasRig, Converter={StaticResource BoolToVis}}">
-                                <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeThumb}"
-                                        BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}">
-                                    <Image Source="{Binding RigImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
-                                           AutomationProperties.Name="Khung nhân vật"/>
-                                </Border>
-                                <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeThumb}"
-                                        BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}">
-                                    <Image Source="{Binding HandImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
-                                           AutomationProperties.Name="Bàn tay mở"/>
-                                </Border>
+                                <StackPanel Margin="{StaticResource SpaceRight}">
+                                    <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeThumb}"
+                                            BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}">
+                                        <Image Source="{Binding RigImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                                               AutomationProperties.Name="Khung nhân vật"/>
+                                    </Border>
+                                    <TextBlock Style="{StaticResource TextMuted}"
+                                               Text="Tay, chân, áo choàng lấy từ hình này. Đầu và thân luôn lấy từ ảnh của bạn."/>
+                                    <StackPanel Orientation="Horizontal" Margin="{StaticResource SpaceGap}">
+                                        <Button Content="Vẽ lại" Command="{Binding RedrawRigPartCommand}" CommandParameter="rig"
+                                                Padding="8,4" Margin="{StaticResource SpaceRight}"/>
+                                        <Button Content="Sửa…" Command="{Binding EditRigPartCommand}" CommandParameter="rig" Padding="8,4"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <StackPanel>
+                                    <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeThumb}"
+                                            BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}">
+                                        <Image Source="{Binding HandImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                                               AutomationProperties.Name="Bàn tay mở"/>
+                                    </Border>
+                                    <TextBlock Style="{StaticResource TextMuted}"
+                                               Text="Chỉ lấy bàn tay mở từ hình này, cho các khung tung chiêu."/>
+                                    <StackPanel Orientation="Horizontal" Margin="{StaticResource SpaceGap}">
+                                        <Button Content="Vẽ lại" Command="{Binding RedrawRigPartCommand}" CommandParameter="hand"
+                                                Padding="8,4" Margin="{StaticResource SpaceRight}"/>
+                                        <Button Content="Sửa…" Command="{Binding EditRigPartCommand}" CommandParameter="hand" Padding="8,4"/>
+                                    </StackPanel>
+                                </StackPanel>
                             </UniformGrid>
+                            <Button Content="Nạp hình đã sửa" Command="{Binding ReloadRigCommand}" HorizontalAlignment="Left"
+                                    Visibility="{Binding IsEditingRig, Converter={StaticResource BoolToVis}}"/>
                             <ItemsControl ItemsSource="{Binding HangingParts}"
                                           Visibility="{Binding HasHanging, Converter={StaticResource BoolToVis}}">
                                 <ItemsControl.ItemTemplate>

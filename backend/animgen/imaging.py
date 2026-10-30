@@ -123,3 +123,24 @@ def save_png(img: Image.Image, path: str | Path) -> None:
     tmp = path.with_suffix(path.suffix + ".part")
     img.save(tmp, format="PNG", optimize=False)
     tmp.replace(path)
+
+
+KEY_DISTANCE = 40         # colour distance from the background that still counts as background
+
+
+def key_background(img: Image.Image) -> Image.Image:
+    """A picture saved without transparency (some editors drop it) gets it back: the plain background touching the
+    edges, the colour of the corners, becomes transparent. A picture with transparency is returned as it is."""
+    a = np.array(img.convert("RGBA"))
+    if a[..., 3].min() < 255:
+        return img
+    rgb = a[..., :3].astype(np.int32)
+    corners = np.concatenate([rgb[:5, :5].reshape(-1, 3), rgb[:5, -5:].reshape(-1, 3),
+                              rgb[-5:, :5].reshape(-1, 3), rgb[-5:, -5:].reshape(-1, 3)])
+    bg = np.median(corners, axis=0)
+    near = (np.linalg.norm(rgb - bg, axis=2) <= KEY_DISTANCE).astype(np.uint8)
+    _, labels = cv2.connectedComponents(near, connectivity=4)
+    edge = np.unique(np.concatenate([labels[0], labels[-1], labels[:, 0], labels[:, -1]]))
+    outside = np.isin(labels, edge) & (near > 0)
+    a[outside, 3] = 0
+    return Image.fromarray(a, "RGBA")

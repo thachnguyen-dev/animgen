@@ -47,7 +47,15 @@ public sealed class BackendClient : IDisposable
         PostAsync<CharacterReply>("character/skeleton", new { points = points.ToArray() });
 
     /// <summary>The AI draws the character's rig and open-hand images (about two minutes).</summary>
-    public Task<TaskReply> MakeRigAsync(int? seed) => PostAsync<TaskReply>("rig", new { seed });
+    /// <param name="part">"rig" or "hand": only that drawing is redrawn; null: both.</param>
+    public Task<TaskReply> MakeRigAsync(int? seed, string? part = null) =>
+        PostAsync<TaskReply>("rig", new { seed, part });
+
+    /// <summary>A copy of one rig drawing ("rig" or "hand") to paint over in the owner's own editor.</summary>
+    public Task<EditReply> EditRigAsync(string part) => PostAsync<EditReply>("rig/edit", new { part });
+
+    /// <summary>The rig rebuilt from the edited drawings.</summary>
+    public Task<SessionState> ReloadRigAsync() => PostAsync<SessionState>("rig/reload", new { });
 
     public Task<SessionState> SetHangingAsync(string name, bool on) =>
         PostAsync<SessionState>("rig/hanging", new { name, on });

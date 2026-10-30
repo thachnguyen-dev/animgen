@@ -64,8 +64,11 @@ public sealed class MainViewModel : ObservableObject
         ChooseCharacterCommand = new AsyncCommand(_ => ChooseCharacterAsync(), OnError, _ => Ready && !IsBusy);
         FlipFacingCommand = new AsyncCommand(_ => FlipFacingAsync(), OnError,
                                              _ => Ready && !IsBusy && _characterPath != null);
-        MakeRigCommand = new AsyncCommand(_ => MakeRigAsync(), OnError,
+        MakeRigCommand = new AsyncCommand(_ => MakeRigAsync(null), OnError,
                                           _ => Ready && !IsBusy && _skeleton is { Confirmed: true });
+        RedrawRigPartCommand = new AsyncCommand(p => MakeRigAsync(p as string), OnError, _ => Ready && !IsBusy && HasRig);
+        EditRigPartCommand = new AsyncCommand(p => EditRigPartAsync((string)p!), OnError, _ => Ready && !IsBusy && HasRig);
+        ReloadRigCommand = new AsyncCommand(_ => ReloadRigAsync(), OnError, _ => Ready && !IsBusy && IsEditingRig);
         GenerateCommand = new AsyncCommand(_ => GenerateAsync(), OnError, _ => CanGenerate);
         RegenerateAllCommand = new AsyncCommand(_ => RegenerateAsync(null), OnError,
                                                 _ => Ready && !IsBusy && HasFrames && CanRedraw);
@@ -152,10 +155,14 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public string RigText => HasRig
-        ? "Phần tô màu sẽ đung đưa khi chuyển động. Nếu hình vẽ sai (thiếu tay, chân lệch…), bấm “Vẽ lại”."
+        ? "Phần tô màu sẽ đung đưa khi chuyển động. Hình nào sai thì bấm “Vẽ lại” dưới hình đó, hoặc “Sửa…” để vẽ đè "
+          + "bằng chương trình vẽ của bạn, lưu lại rồi bấm “Nạp hình đã sửa”."
         : "AI vẽ nhân vật một lần ở tư thế dang tay chân và một lần với bàn tay mở (khoảng 2 phút). Mọi khung hình được làm từ hai hình này.";
 
-    public string RigButtonText => HasRig ? "Vẽ lại khung nhân vật" : "Vẽ khung nhân vật";
+    public string RigButtonText => HasRig ? "Vẽ lại cả hai hình" : "Vẽ khung nhân vật";
+
+    private bool _isEditingRig;
+    public bool IsEditingRig { get => _isEditingRig; private set => Set(ref _isEditingRig, value); }
 
     public ObservableCollection<HangingItem> HangingParts { get; } = new();
 
@@ -259,6 +266,9 @@ public sealed class MainViewModel : ObservableObject
     public ICommand ChooseCharacterCommand { get; }
     public ICommand FlipFacingCommand { get; }
     public ICommand MakeRigCommand { get; }
+    public ICommand RedrawRigPartCommand { get; }
+    public ICommand EditRigPartCommand { get; }
+    public ICommand ReloadRigCommand { get; }
     public ICommand GenerateCommand { get; }
     public ICommand RegenerateAllCommand { get; }
     public ICommand RegenerateFrameCommand { get; }
@@ -375,12 +385,37 @@ public sealed class MainViewModel : ObservableObject
     // ---------------------------------------------------------------------------------------------------------
     // Step 2: rig
     // ---------------------------------------------------------------------------------------------------------
-    private async Task MakeRigAsync()
+    /// <param name="part">"rig" or "hand": only that drawing; null: both.</param>
+    private async Task MakeRigAsync(string? part)
     {
         if (_api == null) return;
         StopPlay();
-        TaskReply r = await _api.MakeRigAsync(null);
+        TaskReply r = await _api.MakeRigAsync(null, part);
         await RunTaskAsync(r.Task!);
+    }
+
+    /// <summary>The drawing opens in the owner's own paint program (owner, 2026-10-31).</summary>
+    private async Task EditRigPartAsync(string part)
+    {
+        if (_api == null) return;
+        EditReply r = await _api.EditRigAsync(part);
+        if (r.State != null) ApplyState(r.State);
+        try { Process.Start(new ProcessStartInfo(r.File) { UseShellExecute = true, Verb = "edit" }); }
+        catch (Exception)
+        {
+            try { Process.Start(new ProcessStartInfo(r.File) { UseShellExecute = true }); }
+            catch (Exception) { OpenFolder(Path.GetDirectoryName(r.File)!); }
+        }
+        SetStatus(StatusKind.Ok, "Đã mở hình để sửa. Vẽ đè lên tay, chân… (giữ nguyên tư thế và kích thước), lưu lại "
+                                 + "dạng PNG rồi bấm “Nạp hình đã sửa”.");
+    }
+
+    private async Task ReloadRigAsync()
+    {
+        if (_api == null) return;
+        StopPlay();
+        ApplyState(await _api.ReloadRigAsync());
+        SetStatus(StatusKind.Ok, "Đã dựng lại khung nhân vật từ hình đã sửa.");
     }
 
     private async Task HangingChangedAsync(HangingItem item)
@@ -413,6 +448,7 @@ public sealed class MainViewModel : ObservableObject
             for (int i = 0; i < parts.Count; i++) HangingParts[i].Load(parts[i].On);
         }
         HasHanging = HangingParts.Count > 0;
+        IsEditingRig = rig is { Editing.Count: > 0 };
     }
 
     // ---------------------------------------------------------------------------------------------------------

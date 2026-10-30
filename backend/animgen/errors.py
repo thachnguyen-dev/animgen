@@ -33,6 +33,11 @@ MESSAGES_VI: dict[str, str] = {
     "rig_missing": "Hãy tạo khung nhân vật (bước 2) trước khi tạo hoạt ảnh.",
     "rig_failed": "Không dựng được khung nhân vật từ bản vẽ này. Hãy vẽ lại.",
     "unknown_part": "Không có phần này trên nhân vật.",
+    "rig_edit_missing": "Chưa có hình nào đang sửa. Hãy bấm “Sửa…” dưới hình trước.",
+    "rig_edit_unreadable": "Không đọc được hình đã sửa. Hãy lưu lại dạng PNG.",
+    "rig_edit_size": "Hình đã sửa phải giữ nguyên kích thước. Hãy vẽ đè lên hình, đừng cắt hay đổi cỡ.",
+    "rig_edit_failed": "Không dựng được khung nhân vật từ hình đã sửa nên đã giữ hình cũ. "
+                       "Khi sửa, hãy giữ nguyên tư thế và vị trí tay chân.",
     "nothing_to_redraw": "Khung hình làm từ khung nhân vật luôn giống nhau; chỉ bản hoàn thiện bằng AI mới vẽ lại được.",
     "no_frames": "Chưa có khung hình nào.",
     "no_candidate": "Khung này không có bản tạo lại để so sánh.",

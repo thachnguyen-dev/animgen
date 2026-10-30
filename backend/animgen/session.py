@@ -24,6 +24,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 from PIL import Image
 
 from . import config
@@ -33,7 +34,7 @@ from .finish import finish as finish_frame
 from .rig import Rig, build_rig
 from .errors import AppError
 from .frames import Placement, clean_alpha, fit_to_canvas, place_reference, validate_image
-from .imaging import pick_background_colour, save_png
+from .imaging import key_background, pick_background_colour, save_png
 from .inputs import CharacterInput, check_character
 from .skeleton import LANK, LHIP, NECK, RANK, RHIP, Proportions, Skeleton, fit_frame, hand_point, measure
 from .tasks import Task
@@ -76,6 +77,9 @@ HAND_POSE = Pose(spine=2, head=0, r_sh=90, r_el=0, l_sh=-40, l_el=20, r_hip=28, 
 HAND_PROMPT = "standing, arm outstretched forward, open palm, fingers spread"
 HAND_STRENGTH = 0.75
 HANGING_TINT = {"cape": (255, 140, 0), "skirt": (0, 160, 255), "hair": (200, 0, 255)}
+# The owner's copies of the drawings, painted over in their own editor (owner, 2026-10-31).
+RIG_EDIT_FILES = {"rig": "rig_edit.png", "hand": "hand_edit.png"}
+EDIT_MIN_DRAWN = 0.25     # an edited drawing keeps at least this share of the drawn pixels
 
 
 @dataclass
@@ -85,6 +89,7 @@ class RigState:
     still: set = field(default_factory=set)      # hanging parts the owner turned off: they stay as drawn
     view: Path | None = None                     # the assembled character, hanging parts tinted, own facing
     hand_view: Path | None = None                # the hand image, own facing
+    editing: list = field(default_factory=list)  # drawings with a copy out for the owner's editor
 
 
 @dataclass
@@ -260,46 +265,128 @@ class Session:
             out.append(fit_frame(tpl, rest, props, ch.placement.anchor, True))
         return out[0], out[1]
 
-    def make_rig(self, task: Task, seed: int | None = None) -> dict:
-        """The AI draws the rig image and the hand image (two drawings, about a minute each on the RTX 4060)."""
+    def make_rig(self, task: Task, seed: int | None = None, part: str | None = None) -> dict:
+        """The AI draws the rig image and the hand image (two drawings, about a minute each on the RTX 4060).
+        ``part`` 'rig' or 'hand': only that drawing is redrawn and the other kept (owner, 2026-10-31: a good body
+        is not thrown away to fix the hand)."""
         ch = self.character
         if ch is None:
             raise AppError("no_character")
         if self.require_confirmed_skeleton and not ch.skeleton_confirmed:
             raise AppError("skeleton_unconfirmed")
+        if part not in (None, "rig", "hand"):
+            raise AppError("unknown_part")
+        if part is not None and self.rig is None:
+            raise AppError("rig_missing")
         self._ensure_loaded(task)
         seed = seed if seed is not None else random.randint(1, 2**31 - 1)
         rig_sk, hand_sk = self._rig_skeletons()
-        task.update(stage="generating", total=2, done=0, message="Đang vẽ khung nhân vật (1/2)…")
-        images = []
-        for n, (sk, prompt, strength) in enumerate(((rig_sk, RIG_PROMPT, RIG_STRENGTH),
-                                                    (hand_sk, HAND_PROMPT, HAND_STRENGTH))):
+        todo = [(name, sk, prompt, strength, n) for n, (name, sk, prompt, strength) in enumerate((
+            ("rig", rig_sk, RIG_PROMPT, RIG_STRENGTH), ("hand", hand_sk, HAND_PROMPT, HAND_STRENGTH)))
+            if part is None or name == part]
+        messages = {"rig": "Đang vẽ khung nhân vật", "hand": "Đang vẽ bàn tay mở"}
+        task.update(stage="generating", total=len(todo), done=0)
+        images = {}
+        for done, (name, sk, prompt, strength, n) in enumerate(todo):
             task.check_cancel()
-            if n:
-                task.update(message="Đang vẽ bàn tay mở (2/2)…")
+            task.update(message=f"{messages[name]} ({done + 1}/{len(todo)})…")
             req = FrameRequest(reference=ch.placement.image, reference_skeleton=ch.skeleton, target_skeleton=sk,
                                background=self.background, prompt=prompt, seed=(seed + n) % (2**31 - 1),
                                hands_gripping=False, extra={"strength": strength})
             try:
-                images.append(self.engine.remover.remove(self.engine.drawer.draw(req), self.background))
+                images[name] = self.engine.remover.remove(self.engine.drawer.draw(req), self.background)
             except EngineError as exc:
                 if exc.kind == "oom":
                     self.engine.free_memory()
                     raise AppError("gpu_out_of_memory") from exc
                 raise AppError("inference_failed", detail=exc.detail or exc.kind) from exc
-            task.update(done=n + 1)
+            task.update(done=done + 1)
         folder = self.rig_dir / ch.key
         folder.mkdir(parents=True, exist_ok=True)
-        save_png(images[0], folder / "rig.png")
-        save_png(images[1], folder / "hand.png")
-        with open(folder / "rig.json", "w", encoding="utf-8") as f:
-            json.dump({"seed": seed, "skeleton": ch.skeleton.to_json(), "still": []}, f, ensure_ascii=False)
+        info = {"seed": seed, "skeleton": ch.skeleton.to_json(), "still": []}
+        if part is not None:
+            info = self._rig_info() or info
+            info["seed" if part == "rig" else "hand_seed"] = seed
+            if part == "rig":
+                info["still"] = []                   # the hanging parts are found again in the new drawing
+        for name, img in images.items():
+            save_png(img, folder / f"{name}.png")
+            (folder / RIG_EDIT_FILES[name]).unlink(missing_ok=True)   # a copy being edited is of the old drawing
+        self._write_rig_info(info)
         with self._lock:
             self._reset_frames()
             self.template = None
         self._load_rig()
         if self.rig is None:
             raise AppError("rig_failed")
+        return self.state()
+
+    def _rig_info(self) -> dict | None:
+        try:
+            with open(self.rig_dir / self.character.key / "rig.json", encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None
+
+    def _write_rig_info(self, info: dict) -> None:
+        with open(self.rig_dir / self.character.key / "rig.json", "w", encoding="utf-8") as f:
+            json.dump(info, f, ensure_ascii=False)
+
+    def rig_edit_file(self, part: str) -> dict:
+        """A copy of one rig drawing for the owner to paint over in their own editor, facing as their character
+        does (owner, 2026-10-31). ``reload_rig_edits`` takes it back."""
+        ch = self.character
+        if ch is None or self.rig is None:
+            raise AppError("rig_missing")
+        if part not in RIG_EDIT_FILES:
+            raise AppError("unknown_part")
+        folder = self.rig_dir / ch.key
+        dst = folder / RIG_EDIT_FILES[part]
+        if not dst.exists():                         # a copy already being edited is never overwritten
+            with Image.open(folder / f"{part}.png") as im:
+                save_png(self._own_facing(im.convert("RGBA")), dst)
+        with self._lock:
+            if part not in self.rig.editing:
+                self.rig.editing.append(part)
+        return {"file": str(dst), "state": self.state()}
+
+    def reload_rig_edits(self) -> dict:
+        """The rig rebuilt from the drawings the owner edited. The old drawings come back if it cannot be built."""
+        ch = self.character
+        if ch is None or self.rig is None:
+            raise AppError("rig_missing")
+        folder = self.rig_dir / ch.key
+        edited = {}
+        for part, name in RIG_EDIT_FILES.items():
+            if not (folder / name).exists():
+                continue
+            with Image.open(folder / f"{part}.png") as im:
+                size, drawn = im.size, int((np.array(im.convert("RGBA"))[..., 3] > 127).sum())
+            try:
+                with Image.open(folder / name) as im:
+                    img = im.convert("RGBA")
+            except OSError as exc:
+                raise AppError("rig_edit_unreadable") from exc
+            if img.size != size:
+                raise AppError("rig_edit_size")
+            img = key_background(img)
+            if (np.array(img)[..., 3] > 127).sum() < EDIT_MIN_DRAWN * drawn:
+                raise AppError("rig_edit_failed")    # most of the drawing erased: nothing to build from
+            edited[part] = self._own_facing(img)     # mirroring again turns it back to facing right
+        if not edited:
+            raise AppError("rig_edit_missing")
+        old = {part: (folder / f"{part}.png").read_bytes() for part in edited}
+        for part, img in edited.items():
+            save_png(img, folder / f"{part}.png")
+        with self._lock:
+            self._reset_frames()
+            self.template = None
+        self._load_rig()
+        if self.rig is None:
+            for part, data in old.items():
+                (folder / f"{part}.png").write_bytes(data)
+            self._load_rig()
+            raise AppError("rig_edit_failed")
         return self.state()
 
     def _load_rig(self) -> None:
@@ -333,6 +420,7 @@ class Session:
             print(f"rig not usable: {type(exc).__name__}: {exc}", file=sys.stderr)
             return
         state = RigState(rig, int(info.get("seed", 0)), set(info.get("still", [])))
+        state.editing = [part for part, name in RIG_EDIT_FILES.items() if (folder / name).exists()]
         state.view = self.temp / f"rig_view_{uuid.uuid4().hex[:8]}.png"
         save_png(self._own_facing(self._rig_view(rig, rig_sk, state.still)), state.view)
         if hand_img is not None:
@@ -372,15 +460,13 @@ class Session:
                 state.still.discard(name)
             else:
                 state.still.add(name)
-        path = self.rig_dir / ch.key / "rig.json"
-        try:
-            with open(path, encoding="utf-8") as f:
-                info = json.load(f)
+        info = self._rig_info()
+        if info is not None:
             info["still"] = sorted(state.still)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(info, f, ensure_ascii=False)
-        except (OSError, ValueError):
-            pass
+            try:
+                self._write_rig_info(info)
+            except OSError:
+                pass
         rig_sk, _ = self._rig_skeletons()
         state.view = self.temp / f"rig_view_{uuid.uuid4().hex[:8]}.png"
         save_png(self._own_facing(self._rig_view(state.rig, rig_sk, state.still)), state.view)
@@ -689,6 +775,7 @@ class Session:
                     "seed": self.rig.seed,
                     "view": str(self.rig.view) if self.rig.view else None,
                     "hand_view": str(self.rig.hand_view) if self.rig.hand_view else None,
+                    "editing": list(self.rig.editing),
                     "hanging": [{"name": p.name, "on": p.name not in self.rig.still}
                                 for m in self.rig.rig.meshes for p in m.hanging],
                 },

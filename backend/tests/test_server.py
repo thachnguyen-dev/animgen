@@ -100,6 +100,15 @@ def test_full_flow(server, tmp_path):
         assert st == 200 and not [h for h in state["rig"]["hanging"] if h["name"] == part["name"]][0]["on"]
     st, err = call(server, "POST", "/rig/hanging", {"name": "tail", "on": False})
     assert st == 400 and err["error"]["code"] == "unknown_part"
+    st, r = call(server, "POST", "/rig", {"part": "hand"})          # only the hand drawing again
+    task = wait_task(server, r["task"]["id"])
+    assert task["state"] == "completed" and task["result"]["rig"]["seed"] == 5, task
+    st, r = call(server, "POST", "/rig/edit", {"part": "hand"})     # the owner paints over it in their editor
+    assert st == 200 and Path(r["file"]).is_file() and r["state"]["rig"]["editing"] == ["hand"]
+    st, state = call(server, "POST", "/rig/reload")
+    assert st == 200 and state["rig"] is not None
+    st, err = call(server, "POST", "/rig/edit", {"part": "head"})
+    assert st == 400 and err["error"]["code"] == "unknown_part"
 
     st, r = call(server, "POST", "/generate", {"animation": "a2"})
     assert st == 200
