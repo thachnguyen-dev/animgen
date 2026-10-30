@@ -38,13 +38,15 @@ recommendation (separate vs combined) after testing.
 4. Skeleton editor (backend + app dialog).
 5. Published to `C:\AnimGen`; moved-folder test on a throw-away copy passed (venv repaired, backend offline,
    skeleton dialog, backend ends with the app).
+6. Real-engine walkthrough of the published app (UI Automation, my test art): DWPose pre-filled the skeleton dialog
+   correctly and detected the facing; Generate Idle 8 frames in 342 s (model load ~20 s); export 256 px wrote 8 PNGs
+   and the sprite sheet; the backend ended with the app.
 
 ## Next steps
 
 1. **GPU, when the owner has separated art:** Phase 0 on it; judge the skeleton pre-fill (DWPose) on the owner's
    style, consistency and line weight; tune with `dev/tools/ab_run.py` + `dev/tools/ab_sheet.py`.
-2. **Optional:** a real-engine walkthrough in the published app (Generate from the UI on the GPU).
-3. **Code only:** puppet improvements with tests (`tests/test_puppet.py`).
+2. **Code only:** puppet improvements with tests (`tests/test_puppet.py`).
 
 ## Notes for a cloud session
 
