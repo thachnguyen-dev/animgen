@@ -69,7 +69,7 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<SkinInfo> Skins { get; } = new();
     public ObservableCollection<FrameItem> Frames { get; } = new();
     public IReadOnlyList<int> FpsChoices { get; } = new[] { 6, 8, 12, 24 };          // cut C7
-    public ObservableCollection<int> ExportHeights { get; } = new() { 256, 512, 1024 };
+    public ObservableCollection<int> ExportHeights { get; } = new() { 128, 256, 512 };
 
     private bool _ready;
     public bool Ready { get => _ready; private set => Set(ref _ready, value); }
@@ -195,7 +195,7 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
-    private int _exportHeight = 512;
+    private int _exportHeight = 256;
     public int ExportHeight { get => _exportHeight; set => Set(ref _exportHeight, value); }
 
     private string _exportFolder = "";

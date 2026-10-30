@@ -18,8 +18,9 @@ CHARACTER_HEIGHT_FRACTION = 0.52
 FOOT_LINE_FRACTION = 0.92
 ANCHOR_X_FRACTION = 0.50
 
-# Proposed (§10.4): export heights offered to the owner. Frames are square, so width = height.
-EXPORT_HEIGHTS = (256, 512, 1024)
+# Export heights offered to the owner. Frames are square, so width = height. Owner (2026-10-30): the sprites are for
+# mobile 2D games, so the output can be much smaller; 1024 is gone (it would only be an upscale of the 768 drawing).
+EXPORT_HEIGHTS = (128, 256, 512)
 
 # Pending (§8.2), Proposed value 2: automatic retries per frame after a failed technical check.
 DEFAULT_AUTO_RETRIES = 2

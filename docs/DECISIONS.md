@@ -43,7 +43,7 @@ Labels: **Owner** = chosen by the owner in this session. **Decided** = decided b
 | Seeds | One random seed per run, offset per frame and per retry. | Reproducible within a run; a regeneration gets a new seed. |
 | Background colour for drawing | White, mid grey or near black, whichever is least present in the character. | §6.5 step 3 ("flat and plain") with a background that the remover can separate. |
 | Image-model settings | 28 steps, CFG 5, ControlNet 0.9, IP-Adapter 0.6, prompt tags per template. | Starting points; all marked TUNE in the code. |
-| Drawing size (local, 2026-10-30) | The AI draws each frame at 896 × 896 (two-panel canvas 1792 × 896) and the result is scaled to the 1024 canvas; everything else (placement, skeletons, export) stays at 1024. | Measured on the owner's RTX 4060 Laptop 8 GB, 16 GB RAM: 1024 → 9.0 s/step (spills into shared GPU memory, ~8.7 min per frame), 896 → 3.2 s/step (~1.5 min per frame, ~13 min per animation), 768 → 2.6 s/step. Keeping the UNet resident or storing weights in fp8 was slower (14–19 s/step). |
+| Drawing size (local, 2026-10-30) | The AI draws each frame at 768 × 768 (two-panel canvas 1536 × 768) and the result is scaled to the internal 1024 canvas; placement and skeletons stay at 1024. First set to 896, lowered to 768 after the owner's note that the sprites are for mobile 2D games (below). | Measured on the owner's RTX 4060 Laptop 8 GB, 16 GB RAM: 1024 → 9.0 s/step (spills into shared GPU memory, ~8.7 min per frame), 896 → 3.2 s/step (~1.5 min per frame, ~13 min per animation), 768 → 2.6 s/step. Keeping the UNet resident or storing weights in fp8 was slower (14–19 s/step). |
 
 ## Weapons
 
@@ -76,6 +76,13 @@ Labels: **Owner** = chosen by the owner in this session. **Decided** = decided b
 | Self-contained publish | `dotnet publish --self-contained`. | The owner's PC needs no .NET runtime install (offline, §2.4). |
 | Moving the install | The app detects a moved DATA folder (venv `home` outside `DATA\python`) and re-creates the venv launcher offline with the bundled uv (§14). | Lesson from chargen. |
 | Line endings | CRLF for all text files; PowerShell scripts saved as UTF-8 with BOM. | §14 (owner's files use CRLF; PowerShell 5.1 and Vietnamese text). |
+
+## Owner notes (2026-10-30) — Confirmed
+
+- The app is for the owner's personal use only, not commercial. Licences are therefore not a selection criterion;
+  a model only has to be suitable. (The table below is kept for the record.)
+- The sprites are used in 2D games on mobile devices, so the output resolution can be much lower. Export heights
+  are now 128, 256 and 512 px (default 256); 1024 was removed because it would only be an upscale.
 
 ## Model licences (verified 2026-10-30 on Hugging Face)
 

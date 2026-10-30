@@ -42,7 +42,8 @@ IP_ADAPTER_SCALE = 0.6          # TUNE
 REFERENCE_PANEL = True          # cut C10 would set this False (IP-Adapter alone, faster, weaker consistency)
 # Each frame is drawn at this size and scaled back to the canvas. Measured on the owner's 8 GB RTX 4060 laptop
 # (two panels, 10 steps): 1024 -> 9.0 s/step (spills into shared memory), 896 -> 3.2 s/step, 768 -> 2.6 s/step.
-DRAW_SIZE = 896
+# 768 since the owner's note that the sprites are for mobile (exports at most 512); SDXL degrades well below it.
+DRAW_SIZE = 768
 
 BACKGROUND_WORDS = {(255, 255, 255): "white background", (128, 128, 128): "grey background",
                     (40, 40, 40): "black background"}
