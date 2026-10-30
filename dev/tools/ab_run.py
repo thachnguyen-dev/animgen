@@ -16,6 +16,7 @@ from animgen.tasks import TaskRunner  # noqa: E402
 char, anim, out = sys.argv[1], sys.argv[2], Path(sys.argv[3])
 out.mkdir(parents=True, exist_ok=True)
 base_positive = de.POSITIVE
+DEFAULTS = {"steps": de.STEPS, "cn": de.CONTROL_SCALE, "ip": de.IP_ADAPTER_SCALE, "str": de.STRENGTH}
 engine = make_engine("diffusers", Path(r"C:\AnimGen\models"))
 RAW = {"dir": out, "n": 0}
 
@@ -52,10 +53,10 @@ results = []
 for spec in sys.argv[4:]:
     name, *opts = spec.split(":")
     o = dict(x.split("=", 1) for x in opts)
-    de.STEPS = int(o.get("steps", 28))
-    de.CONTROL_SCALE = float(o.get("cn", 0.9))
-    de.IP_ADAPTER_SCALE = float(o.get("ip", 0.6))
-    de.STRENGTH = float(o.get("str", 0.6))
+    de.STEPS = int(o.get("steps", DEFAULTS["steps"]))
+    de.CONTROL_SCALE = float(o.get("cn", DEFAULTS["cn"]))
+    de.IP_ADAPTER_SCALE = float(o.get("ip", DEFAULTS["ip"]))
+    de.STRENGTH = float(o.get("str", DEFAULTS["str"]))
     style = o.get("style", "").replace("+", " ").replace("|", ", ")
     de.POSITIVE = base_positive.replace("{motion}, ", "{motion}, " + (style + ", " if style else ""))
     RAW["tag"], RAW["n"] = name, 0

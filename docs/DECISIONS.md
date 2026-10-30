@@ -93,6 +93,9 @@ Labels: **Owner** = chosen by the owner in this session. **Decided** = decided b
   DWPose on every exported frame), poses follow the templates, the sword sits in the hand. Still weak: lines thinner
   and paler than the reference; small drift (hair, a missing sleeve in one frame); the model sometimes drew a prop at
   the waist, so the negative prompt now also lists holding, dagger, knife and shield.
+- Line weight, A/B on Idle (same seed): IP-Adapter 0.8 kept the reference's colours and darker outlines better than
+  0.6, with the same poses — **now the default**. Strength 0.5 changed little. Style tags ("thick outlines, bold
+  lineart") gave the boldest lines but would force one line style on every character, so they are not used.
 
 ## Owner notes (2026-10-30) — Confirmed
 

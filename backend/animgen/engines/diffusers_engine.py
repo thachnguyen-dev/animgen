@@ -42,7 +42,9 @@ STRENGTH = 0.6                  # TUNE: share of the rough repose that is repain
                                 # 0.75 starts to redraw the outfit; 1.0 (from noise) lost the character entirely.
 GUIDANCE = 5.0                  # TUNE (Animagine 4 recommends 4–7)
 CONTROL_SCALE = 0.9             # TUNE
-IP_ADAPTER_SCALE = 0.6          # TUNE
+IP_ADAPTER_SCALE = 0.8          # TUNE: A/B on Idle (2026-10-30): 0.8 kept the reference's colours and darker
+#                                 outlines better than 0.6; strength 0.5 changed little; style tags (thick outlines) were
+#                                 bolder but would force one line style on every character
 REFERENCE_PANEL = True          # cut C10 would set this False (IP-Adapter alone, faster, weaker consistency)
 # Each frame is drawn at this size and scaled back to the canvas. Measured on the owner's 8 GB RTX 4060 laptop
 # (two panels, 10 steps): 1024 -> 9.0 s/step (spills into shared memory), 896 -> 3.2 s/step, 768 -> 2.6 s/step.
