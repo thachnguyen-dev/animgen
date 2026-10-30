@@ -2,7 +2,8 @@
 background removed with the app's own ToonOut remover.
 
 usage: python make_temp_art.py <out_dir> <job> [seeds...]
-jobs: hero (no weapon), hero_sword (combined), sword, bow
+jobs: hero (no weapon), hero_sword (combined), sword, bow; western set like the owner's old art: knight, archer,
+      archer34 (three-quarter view), mage, staff
 """
 import sys
 import time
@@ -22,6 +23,10 @@ NEG = ("lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer dig
 CHAR = ("1boy, solo, full body, standing, from side, profile, facing right, young knight, light leather armor, "
         "brown hair, short hair, boots, arms at sides, thick outlines, bold lineart, flat color, cel shading, "
         "western cartoon, game sprite, ")
+WEST = ("1man, solo, adult, full body, standing, from side, profile, facing right, arms at sides, western, realistic, "
+        "semi-realistic, game art, detailed, thick outlines, ")
+EMPTY = "empty hands, simple background, white background, " + Q
+NEG_EMPTY = NEG + ", weapon, sword, holding, holding weapon, bow, staff, shield, anime, chibi"
 JOBS = {
     "hero": (CHAR + "empty hands, simple background, white background, " + Q,
              NEG + ", weapon, sword, holding, holding weapon, bow, staff, shield", (832, 1216)),
@@ -32,6 +37,17 @@ JOBS = {
     "bow": ("no humans, bow (weapon), wooden recurve bow, longbow, vertical, side view, object focus, bowstring, "
             "simple background, white background, game asset, " + Q,
             NEG + ", arrow, quiver, 1boy, 1girl, hand, holding", (832, 1216)),
+    # Western, semi-realistic set (the owner's old images: armoured knight with cape, bearded archer with quiver).
+    "knight": (WEST + "knight, full plate armor, steel armor, helmet, red cape, gauntlets, armored boots, " + EMPTY,
+               NEG_EMPTY, (832, 1216)),
+    "archer": (WEST + "archer, beard, short black hair, green tunic, brown leather armor, quiver on back, belt, "
+               "leather boots, " + EMPTY, NEG_EMPTY, (832, 1216)),
+    "archer34": (WEST.replace("from side, profile, ", "three-quarter view, ") + "archer, beard, short black hair, "
+                 "green tunic, brown leather armor, quiver on back, belt, leather boots, " + EMPTY, NEG_EMPTY, (832, 1216)),
+    "mage": (WEST + "old wizard, long white beard, long blue robe, hood down, sash, " + EMPTY, NEG_EMPTY, (832, 1216)),
+    "staff": ("no humans, wooden staff, magic staff, wizard staff, crystal on top, vertical, side view, object focus, "
+              "simple background, white background, game asset, " + Q, NEG + ", 1boy, 1girl, hand, holding",
+              (832, 1216)),
 }
 
 

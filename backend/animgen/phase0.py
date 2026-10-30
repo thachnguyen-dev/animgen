@@ -50,6 +50,10 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--bow", nargs=3)
     ap.add_argument("--bow-grip", type=_xy, help="same points for the 3 stage images")
     ap.add_argument("--bow-tip", type=_xy, nargs="+", help="one point for all stages, or one per stage")
+    ap.add_argument("--staff")
+    ap.add_argument("--staff-grip", type=_xy)
+    ap.add_argument("--staff-tip", type=_xy)
+    ap.add_argument("--anims", nargs="+", help="animation ids to run instead of the default set")
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
@@ -77,6 +81,16 @@ def main(argv: list[str] | None = None) -> None:
         for st in (1, 2, 3):
             s.weapons.set_points(w.id, "a", st, a.bow_grip, tips[st - 1], apply_to_all_skins=False)
         runs.append(("a5", WeaponChoice(w.id, "a")))
+    if a.staff:
+        w = s.weapons.add("phase0-staff", "staff", "a", [a.staff])
+        s.weapons.set_points(w.id, "a", 1, a.staff_grip, a.staff_tip)
+        runs.append(("a6", WeaponChoice(w.id, "a")))
+    if a.anims:
+        armed = {an: wp for an, wp in runs if wp is not None}
+        missing = [an for an in a.anims if an in ("a2", "a5", "a6") and an not in armed]
+        if missing:
+            ap.error(f"{', '.join(missing)} need their weapon (--sword, --bow, --staff)")
+        runs = [(an, armed.get(an)) for an in a.anims]
 
     torch = None
     if a.engine == "diffusers":
