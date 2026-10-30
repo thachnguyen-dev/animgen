@@ -15,19 +15,21 @@ arm. A limb mesh bends across its elbow or knee: its vertices blend the two bone
 and move rigidly elsewhere. The head is rigid and turns with the template's head bone (spine lean and head tilt),
 within HEAD_TURN; only the body just around it follows it partly (the neck). Shoulders and hips are not blended: the
 arm is drawn over the shoulder and the body over the hip, and blending them pulled the tunic and the cape along with
-the legs (knight test, 2026-10-30: smears at the feet and the hips).
+the legs (knight test, 2026-10-30: smears at the feet and the hips). Capes, skirts and long hair swing on their own
+(cloth.py) when a whole animation is rendered (``render_sequence``).
 
 All images are canvas-sized RGBA facing right (as the templates); skeletons are canvas coordinates.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import cv2
 import numpy as np
 from PIL import Image
 
+from .cloth import Hanging, bend, find_hanging, ground_speed, simulate
 from .puppet import PART_GROW, _cut, _drop_specks, _reference_bones, _segment_distance, _similarity, _target_bones
 from .skeleton import Skeleton
 
@@ -62,6 +64,7 @@ class Mesh:
     weights: np.ndarray                 # (n, k) per vertex, per bone; rows sum to 1
     tris: np.ndarray                    # (m, 3) vertex indices, in drawing order (back first)
     bones: tuple                        # k × (bind bone, frame bone)
+    hanging: list[Hanging] = field(default_factory=list)
 
 
 @dataclass
@@ -70,8 +73,9 @@ class Rig:
     bind: dict                          # bind bone name -> (a, b)
     size: tuple[int, int]
 
-    def render(self, target: Skeleton) -> Image.Image:
-        """The character in the target pose (RGBA, canvas-sized, transparent around)."""
+    def render(self, target: Skeleton, swing: dict[str, float] | None = None) -> Image.Image:
+        """The character in the target pose (RGBA, canvas-sized, transparent around). ``swing``: the hanging parts'
+        angles (``swings``); without it they hang as drawn."""
         w, h = self.size
         out = np.zeros((h, w, 4), np.uint8)
         frame = _target_bones(target)
@@ -79,12 +83,37 @@ class Rig:
             mats = [self._matrix(b, f, frame) for b, f in mesh.bones]
             if any(m is None for m in mats):
                 continue
-            moved = _deform(mesh, mats, (h, w))
+            verts = mesh.verts
+            for part in mesh.hanging:
+                if swing and swing.get(part.name):
+                    verts = bend(verts, part, swing[part.name])
+            moved = _deform(mesh, mats, (h, w), verts)
             k = moved[..., 3:4].astype(np.float32) / 255
             out[..., :3] = (moved[..., :3] * k + out[..., :3] * (1 - k)).astype(np.uint8)
             out[..., 3] = np.maximum(out[..., 3], moved[..., 3])
         _drop_specks(out)
         return Image.fromarray(out, "RGBA")
+
+    def swings(self, targets: list[Skeleton], loop: bool) -> list[dict[str, float]]:
+        """The hanging parts' angles in each frame of an animation (``loop``: it repeats, as idle, walk, run)."""
+        out: list[dict[str, float]] = [{} for _ in targets]
+        frames = [_target_bones(t) for t in targets]
+        figure = _figure_height(targets[0]) if targets else 0.0
+        speed = ground_speed(targets, figure) if figure else 0.0
+        for mesh in self.meshes:
+            for part in mesh.hanging:
+                mats = [self._matrix(part.bone, part.bone, f) for f in frames]
+                if any(m is None for m in mats):
+                    continue
+                pivots = [m[:, :2] @ part.pivot + m[:, 2] for m in mats]
+                carried = [float(np.degrees(np.arctan2(m[1, 0], m[0, 0]))) for m in mats]
+                for i, angle in enumerate(simulate(pivots, carried, part, figure, speed, loop)):
+                    out[i][part.name] = angle
+        return out
+
+    def render_sequence(self, targets: list[Skeleton], loop: bool) -> list[Image.Image]:
+        """A whole animation, with the hanging parts swinging through it."""
+        return [self.render(t, s) for t, s in zip(targets, self.swings(targets, loop))]
 
     def _matrix(self, bind_bone: str, frame_bone: str, frame: dict) -> np.ndarray | None:
         a, b = self.bind[bind_bone]
@@ -106,11 +135,12 @@ def _head_matrix(a, b, a2, b2) -> np.ndarray:
     return m
 
 
-def _deform(mesh: Mesh, mats: list[np.ndarray], size: tuple[int, int]) -> np.ndarray:
-    """The mesh's image bent by its bones: each vertex moves by the weighted blend of its bones' moves, then every
-    pixel of each moved triangle takes the colour of the same place in the bind-pose triangle."""
+def _deform(mesh: Mesh, mats: list[np.ndarray], size: tuple[int, int], verts: np.ndarray) -> np.ndarray:
+    """The mesh's image bent by its bones: each vertex (``verts``: the bind-pose vertices, hanging parts already
+    swung) moves by the weighted blend of its bones' moves, then every pixel of each moved triangle takes the colour
+    of the same place in the bind-pose triangle."""
     h, w = size
-    homo = np.hstack([mesh.verts, np.ones((len(mesh.verts), 1))])
+    homo = np.hstack([verts, np.ones((len(verts), 1))])
     moved = np.einsum("nk,kij,nj->ni", mesh.weights, np.stack(mats), homo)
     ids = np.full((h, w), -1, np.float32)
     for t, tri in enumerate(mesh.tris):
@@ -297,6 +327,8 @@ def build_rig(original: Image.Image, original_sk: Skeleton, rig_image: Image.Ima
         if far:
             rgba[..., :3] = (rgba[..., :3] * FAR_DARKEN).astype(np.uint8)
         mesh = _mesh(name, rgba, owner, owner == 2, tuple(bones), bind, blend)
+        if mesh is not None and name == "body":
+            mesh.hanging = find_hanging(mesh.verts, owner == 1, owner == 2, bind, _figure_height(rig_sk))
         if mesh is not None:
             meshes.append(mesh)
     return Rig(meshes, bind, (w, h))

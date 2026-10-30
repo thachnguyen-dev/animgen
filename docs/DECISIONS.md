@@ -244,6 +244,13 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   template's head bone within HEAD_TURN, and only the neck blends. Shoulders and hips are not blended: blending
   them pulled the tunic and cape along with the legs (knight: smears at feet and hips). A body fill from the rig
   image that does not match the owner's colours around it takes their average (archer: AI quiver as a pale bag).
+- Done (3), mine (`animgen/cloth.py`): hanging parts found in the bind pose: body pixels well behind the spine
+  (cape, back flap), body pixels below the hips (skirt, tunic tail), head pixels behind and well below the neck (long
+  hair; short ones are beards or helmet rims and stay still). Each swings as a damped pendulum from its pivot over
+  the whole animation (12 fps nominal; idle/walk/run looped to a steady cycle, attacks once), pushed by the pivot's
+  motion and by air drag ∝ speed²; templates walk in place, so the speed is how fast the planted foot slides back.
+  The swing bends the part gradually from the pivot to the hem. Knight: cape still in idle, ~12° walking, ~30°
+  running. Correcting the parts in the skeleton editor comes with the app integration.
 
 ## Not done on purpose
 

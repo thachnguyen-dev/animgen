@@ -84,12 +84,10 @@ for char in chars:
             for anim in ANIMS:
                 tpl = load_template(anim)
                 p2 = measure(ch.skeleton, tpl.rest, ch.placement.figure_height, ch.placement.anchor[1])
-                frames = []
-                for f in tpl.frames:
-                    im = rig.render(fit_frame(f.skeleton, tpl.rest, p2, ch.placement.anchor, f.grounded))
-                    if ch.placement.mirrored:
-                        im = im.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-                    frames.append(im)
+                targets = [fit_frame(f.skeleton, tpl.rest, p2, ch.placement.anchor, f.grounded) for f in tpl.frames]
+                frames = rig.render_sequence(targets, loop=tpl.animation != "attack")
+                if ch.placement.mirrored:
+                    frames = [im.transpose(Image.Transpose.FLIP_LEFT_RIGHT) for im in frames]
                 row, tiles = strip(frames)
                 tiles[0].save(out / f"{tag}_{anim}.gif", save_all=True, append_images=tiles[1:], duration=125, loop=0)
                 rows.append(row)
