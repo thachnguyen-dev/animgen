@@ -28,11 +28,11 @@ MODELS = [
      ["config.json", "diffusion_pytorch_model.safetensors"], "MIT"),
     ("ip-adapter", "h94/IP-Adapter",
      ["sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors", "models/image_encoder/config.json",
-      "models/image_encoder/model.safetensors"], "Apache-2.0 (verify)"),
-    ("dwpose", "yzd-v/DWPose", ["yolox_l.onnx", "dw-ll_ucoco_384.onnx"], "Apache-2.0 (verify)"),
+      "models/image_encoder/model.safetensors"], "Apache-2.0 (image encoder: LAION CLIP ViT-H, MIT)"),
+    ("dwpose", "yzd-v/DWPose", ["yolox_l.onnx", "dw-ll_ucoco_384.onnx"], "Apache-2.0"),
     ("birefnet", "ZhengPeng7/BiRefNet", ["*.json", "*.py", "model.safetensors"], "MIT"),
     ("toonout", "joelseytre/toonout", ["birefnet_finetuned_toonout.pth", "README.md"],
-     "MIT; training data CC-BY 4.0 (verify repository and file name)"),
+     "MIT; training data CC-BY 4.0"),
 ]
 
 # ControlNet Union ProMax is two specially named files in the repository; they are renamed to the standard names.

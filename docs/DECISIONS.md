@@ -43,6 +43,7 @@ Labels: **Owner** = chosen by the owner in this session. **Decided** = decided b
 | Seeds | One random seed per run, offset per frame and per retry. | Reproducible within a run; a regeneration gets a new seed. |
 | Background colour for drawing | White, mid grey or near black, whichever is least present in the character. | §6.5 step 3 ("flat and plain") with a background that the remover can separate. |
 | Image-model settings | 28 steps, CFG 5, ControlNet 0.9, IP-Adapter 0.6, prompt tags per template. | Starting points; all marked TUNE in the code. |
+| Drawing size (local, 2026-10-30) | The AI draws each frame at 896 × 896 (two-panel canvas 1792 × 896) and the result is scaled to the 1024 canvas; everything else (placement, skeletons, export) stays at 1024. | Measured on the owner's RTX 4060 Laptop 8 GB, 16 GB RAM: 1024 → 9.0 s/step (spills into shared GPU memory, ~8.7 min per frame), 896 → 3.2 s/step (~1.5 min per frame, ~13 min per animation), 768 → 2.6 s/step. Keeping the UNet resident or storing weights in fp8 was slower (14–19 s/step). |
 
 ## Weapons
 
@@ -75,6 +76,18 @@ Labels: **Owner** = chosen by the owner in this session. **Decided** = decided b
 | Self-contained publish | `dotnet publish --self-contained`. | The owner's PC needs no .NET runtime install (offline, §2.4). |
 | Moving the install | The app detects a moved DATA folder (venv `home` outside `DATA\python`) and re-creates the venv launcher offline with the bundled uv (§14). | Lesson from chargen. |
 | Line endings | CRLF for all text files; PowerShell scripts saved as UTF-8 with BOM. | §14 (owner's files use CRLF; PowerShell 5.1 and Vietnamese text). |
+
+## Model licences (verified 2026-10-30 on Hugging Face)
+
+| Model | Licence |
+|---|---|
+| Animagine XL 4.0 | CreativeML Open RAIL++-M (use-based restrictions; commercial use allowed) |
+| SDXL VAE fp16 fix | MIT |
+| ControlNet Union SDXL ProMax (xinsir) | Apache-2.0 |
+| IP-Adapter Plus SDXL (h94) | Apache-2.0; its image encoder LAION CLIP ViT-H is MIT |
+| DWPose (yzd-v) | Apache-2.0 |
+| BiRefNet code | MIT |
+| ToonOut weights | MIT (training data CC-BY 4.0) |
 
 ## Character skeleton set by the owner (local finalisation, 2026-10-30)
 

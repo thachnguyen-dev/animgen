@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--sword-tip", type=_xy)
     ap.add_argument("--bow", nargs=3)
     ap.add_argument("--bow-grip", type=_xy, help="same points for the 3 stage images")
-    ap.add_argument("--bow-tip", type=_xy)
+    ap.add_argument("--bow-tip", type=_xy, nargs="+", help="one point for all stages, or one per stage")
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
@@ -71,8 +71,11 @@ def main(argv: list[str] | None = None) -> None:
         runs.append(("a2", WeaponChoice(w.id, "a")))
     if a.bow:
         w = s.weapons.add("phase0-bow", "bow", "a", list(a.bow))
+        tips = a.bow_tip * 3 if len(a.bow_tip) == 1 else a.bow_tip
+        if len(tips) != 3:
+            ap.error("--bow-tip takes one point or three")
         for st in (1, 2, 3):
-            s.weapons.set_points(w.id, "a", st, a.bow_grip, a.bow_tip, apply_to_all_skins=False)
+            s.weapons.set_points(w.id, "a", st, a.bow_grip, tips[st - 1], apply_to_all_skins=False)
         runs.append(("a5", WeaponChoice(w.id, "a")))
 
     torch = None

@@ -319,9 +319,9 @@ and replaces it only when the user accepts. A good frame is never lost to a wors
 |---|---|---|---|---|
 | Main image model (the one primary model) | Animagine XL 4.0 (SDXL-based, anime/cartoon) | ~6.9 GB | CreativeML Open RAIL++-M, unmodified; allows personal use | Proposed |
 | Pose and inpaint guidance | ControlNet Union SDXL 1.0 ProMax (xinsir) | ~2.5 GB | Apache-2.0 | Proposed; Inherited—Verify |
-| Reference appearance | IP-Adapter Plus SDXL (ViT-H) + CLIP ViT-H image encoder | ~0.9 + 2.5 GB | Apache-2.0 (verify) | Proposed |
+| Reference appearance | IP-Adapter Plus SDXL (ViT-H) + CLIP ViT-H image encoder | ~0.9 + 2.5 GB | Apache-2.0; encoder MIT (verified 2026-10-30) | Proposed |
 | Background removal | ToonOut (BiRefNet fine-tune for anime) | ~0.9 GB | MIT; training data CC-BY 4.0 | Proposed |
-| Skeleton reading | DWPose (yolox_l + dw-ll_ucoco_384, ONNX) | ~0.35 GB | Apache-2.0 (verify) | Proposed; Inherited—Verify |
+| Skeleton reading | DWPose (yolox_l + dw-ll_ucoco_384, ONNX) | ~0.35 GB | Apache-2.0 (verified 2026-10-30) | Proposed; Inherited—Verify |
 | Image decoder | sdxl-vae-fp16-fix | ~0.3 GB | MIT | Proposed; Inherited—Verify |
 
 Considered and not proposed:

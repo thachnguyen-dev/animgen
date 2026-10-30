@@ -31,7 +31,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from ..skeleton import draw_openpose
+from ..skeleton import Skeleton, draw_openpose
 from .base import Engine, EngineError, FrameRequest, ProgressFn
 from .dwpose import DWPoseReader
 
@@ -40,6 +40,9 @@ GUIDANCE = 5.0                  # TUNE (Animagine 4 recommends 4–7)
 CONTROL_SCALE = 0.9             # TUNE
 IP_ADAPTER_SCALE = 0.6          # TUNE
 REFERENCE_PANEL = True          # cut C10 would set this False (IP-Adapter alone, faster, weaker consistency)
+# Each frame is drawn at this size and scaled back to the canvas. Measured on the owner's 8 GB RTX 4060 laptop
+# (two panels, 10 steps): 1024 -> 9.0 s/step (spills into shared memory), 896 -> 3.2 s/step, 768 -> 2.6 s/step.
+DRAW_SIZE = 896
 
 BACKGROUND_WORDS = {(255, 255, 255): "white background", (128, 128, 128): "grey background",
                     (40, 40, 40): "black background"}
@@ -150,8 +153,9 @@ class SDXLDrawer:
         pipe.set_ip_adapter_scale(IP_ADAPTER_SCALE)
         say("Đang tải mô hình (4/4)…")
         # §14: leaf-level group offload of the UNet; everything else resident on the GPU.
-        pipe.unet.apply_group_offloading(onload_device=torch.device("cuda"), offload_type="leaf_level",
-                                         use_stream=True, low_cpu_mem_usage=True)
+        from diffusers.hooks import apply_group_offloading
+        apply_group_offloading(pipe.unet, onload_device=torch.device("cuda"), offload_device=torch.device("cpu"),
+                               offload_type="leaf_level", use_stream=True, low_cpu_mem_usage=True)
         for part in (pipe.controlnet, pipe.vae, pipe.text_encoder, pipe.text_encoder_2, pipe.image_encoder):
             part.to("cuda")
         pipe.vae.enable_tiling()
@@ -162,6 +166,16 @@ class SDXLDrawer:
         self.pipe = None
 
     def draw(self, req: FrameRequest) -> Image.Image:
+        canvas_size = req.reference.size[0]
+        if canvas_size == DRAW_SIZE:
+            return self._draw(req)
+        k = DRAW_SIZE / canvas_size
+        small = FrameRequest(req.reference.resize((DRAW_SIZE, DRAW_SIZE), Image.Resampling.LANCZOS),
+                             _scaled(req.reference_skeleton, k), _scaled(req.target_skeleton, k), req.background,
+                             req.prompt, req.seed, req.hands_gripping, req.extra)
+        return self._draw(small).resize((canvas_size, canvas_size), Image.Resampling.LANCZOS)
+
+    def _draw(self, req: FrameRequest) -> Image.Image:
         import torch
         if self.pipe is None:
             raise EngineError("inference", "models not loaded")
@@ -207,6 +221,10 @@ class SDXLDrawer:
         if REFERENCE_PANEL:
             out = out.crop((size, 0, width, size))
         return out.convert("RGB")
+
+
+def _scaled(skel: Skeleton, k: float) -> Skeleton:
+    return Skeleton([None if pt is None else (pt[0] * k, pt[1] * k) for pt in skel.points], list(skel.confidence))
 
 
 class DiffusersEngine(Engine):
