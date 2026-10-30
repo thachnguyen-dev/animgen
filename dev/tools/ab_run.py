@@ -1,6 +1,6 @@
 """A/B variants of the real engine on one animation, one model load.
 usage: python ab_run.py <character.png> <animation> <out_dir> <variant>...
-variant = name:ip=<scale>:cn=<scale>:steps=<n>:style=<extra positive tags, '+' for spaces/commas>
+variant = name:ip=<scale>:cn=<scale>:str=<strength>:steps=<n>:style=<extra positive tags, '+' for spaces/commas>
 """
 import json
 import sys
@@ -55,6 +55,7 @@ for spec in sys.argv[4:]:
     de.STEPS = int(o.get("steps", 28))
     de.CONTROL_SCALE = float(o.get("cn", 0.9))
     de.IP_ADAPTER_SCALE = float(o.get("ip", 0.6))
+    de.STRENGTH = float(o.get("str", 0.6))
     style = o.get("style", "").replace("+", " ").replace("|", ", ")
     de.POSITIVE = base_positive.replace("{motion}, ", "{motion}, " + (style + ", " if style else ""))
     RAW["tag"], RAW["n"] = name, 0

@@ -88,7 +88,11 @@ Labels: **Owner** = chosen by the owner in this session. **Decided** = decided b
   (`animgen/puppet.py`: parts cut by bone and moved onto the target skeleton; far limbs as darker copies) and the image
   model repaints part of it (`STRENGTH` 0.6). Result: correct pose, the outfit and colours kept, a clean white
   background. 0.45 left cut seams; 0.75 began to redraw the outfit.
-- Still open: a full 8-frame run, line weight (thinner than the reference), tuning. See HANDOFF.md.
+- Full Phase 0 run (test art, 2026-10-30): Idle, Walk, A2 (sword) and A5 (bow, 3 draw stages) all 8/8 frames on the first attempt, about
+  40–55 s per frame, peak 7.3 GB GPU memory. Same outfit and colours across frames, correct facing (checked with
+  DWPose on every exported frame), poses follow the templates, the sword sits in the hand. Still weak: lines thinner
+  and paler than the reference; small drift (hair, a missing sleeve in one frame); the model sometimes drew a prop at
+  the waist, so the negative prompt now also lists holding, dagger, knife and shield.
 
 ## Owner notes (2026-10-30) — Confirmed
 
@@ -126,6 +130,12 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
 - Generation is refused until the skeleton is confirmed (one click when it is already right).
 - Weapons keep their two clicked points (grip, tip): that already is the weapon's stick figure; bows have them per
   draw stage.
+- Implemented: `Session.confirm_skeleton` and `POST /character/skeleton`; saved as
+  `DATA/skeletons/<content hash>.json` in the image's own facing (facing saved with it); the app's backend refuses
+  Generate with `skeleton_unconfirmed` until confirmed (scripts and tests are not gated). The app's skeleton dialog
+  opens by itself after a character with an unconfirmed skeleton loads, shows only the figure (cropped from the
+  canvas) with its 18 joints, lets the owner drag a joint or pick it in the list and click its place, remove a
+  hidden joint, reset, and confirm. Confirming drops frames drawn from the old skeleton.
 - DWPose stays as the pre-fill. If Phase 0 shows it is wrong on most of the owner's art, it can be dropped and the
   pre-fill comes from standard proportions alone.
 

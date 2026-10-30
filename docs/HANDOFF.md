@@ -1,6 +1,6 @@
-﻿# Handoff — local finalisation paused (2026-10-30)
+﻿# Handoff — local finalisation (2026-10-30, resumed)
 
-Paused at the owner's request. This page says where the work stands, what was verified on the owner's PC, and what
+Paused at the owner's request, then resumed the same day. This page says where the work stands, what was verified on the owner's PC, and what
 comes next, so a later session (on the PC or in the cloud) can pick it up. Decisions are in `DECISIONS.md`.
 
 ## Owner's PC (verified)
@@ -17,7 +17,7 @@ comes next, so a later session (on the PC or in the cloud) can pick it up. Decis
 |---|---|
 | Loading and running on 8 GB | Works. UNet streamed leaf by leaf (`diffusers.hooks.apply_group_offloading`). |
 | Speed | Each frame drawn at 768 (`DRAW_SIZE`); about 1 min per frame. 1024 spilled into shared memory (9 s/step). |
-| Drawing method | **Changed** (see DECISIONS.md "Drawing method"): rough puppet repose (`animgen/puppet.py`) + partial repaint (`STRENGTH` 0.6), pose control only. Verified on **single-frame probes** only; no full 8-frame run yet. |
+| Drawing method | **Changed** (see DECISIONS.md "Drawing method"): rough puppet repose (`animgen/puppet.py`) + partial repaint (`STRENGTH` 0.6), pose control only. Full Phase 0 run: Idle, Walk, A2, A5 (bow) 8/8 frames first try, 40–55 s per frame. Weak: thin pale lines, small drift. |
 | Old method (from noise, pose + inpaint control) | Rejected: the right panel stayed an empty flat field for poses unlike the reference (`dev/test_art/result_old_method_blank.png`); Idle/Walk drifted in outfit and style. |
 | Facing | DWPose detects the test character as facing left; it is mirrored in and out as designed. |
 | Second figures / props | `clean_alpha` now removes regions away from the target skeleton. |
@@ -38,8 +38,8 @@ recommendation (separate vs combined) after testing.
    single frames, `dev/tools/ab_run.py` for whole animations).
 2. **GPU:** separate vs combined comparison for the owner (a character holding the sword: `dev/tools/make_temp_art.py
    … hero_sword`), then the recommendation.
-3. **Code only (cloud is fine):** the skeleton editor decided in DECISIONS.md (joints over the character, DWPose
-   pre-fill, confirm once per image, required before Generate); puppet improvements with tests (`tests/test_puppet.py`).
+3. **Done:** the skeleton editor (backend + app dialog, see DECISIONS.md). Code-only work left: puppet improvements
+   with tests (`tests/test_puppet.py`).
 4. **Then:** publish (`scripts\publish.ps1 -Data C:\AnimGen`), offline test, moved-folder test; Phase 0 on the owner's
    art when it exists.
 
