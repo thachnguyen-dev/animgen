@@ -216,6 +216,21 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
 - Also fixed: a wide arm (armour) moving away left a background pocket between the cape and the back, painted as a
   white patch (knight). The body the arm hid is now filled before the model repaints (`BODY_CLOSE`).
 
+## Layered cut-out character (2026-10-30) — owner inputs Confirmed, method Proposed (prototype)
+
+- Owner, after testing: the 8 frames are consistent and the action is right, but the face and hairstyle differ from
+  the image and most frames have distortions, wrongly oriented legs and broken proportions. Owner proposed learning
+  per pose; I advised against (no training data for side-view poses; learning lowers the failure rate but cannot make
+  a passed test hold for every new character; a per-character LoRA costs 20–40 min and fixes the face only).
+- Owner, confirmed: only ONE complete character image is given; closed fists in all poses; the face keeps its overall
+  look (hairstyle, hair colour), fine detail not needed; imperfections in secondary parts are acceptable (the user
+  post-processes, not a bug).
+- Method (mine, Proposed): AI draws the character once in a spread pose (rig image: near arm forward, far arm back,
+  wide stride, closed fists), owner can redraw it; head and body come from the owner's image, limbs from the rig
+  image; every frame is the layers moved onto the template skeleton (`animgen/rig.py`), no AI per frame. Face and
+  hair are always the owner's pixels; proportions and limb order follow the template exactly; 8 frames in seconds.
+  Prototype: `dev/tools/rig_proto.py`.
+
 ## Not done on purpose
 
 - No free-form prompts, no batch generation, no automatic quality scoring, no Unity configuration files, no
