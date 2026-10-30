@@ -82,3 +82,10 @@ PowerShell scripts.
   punch from behind the head, cast arm forward. See DECISIONS.md "Layered cut-out character".
 - Next: owner decides on integration (rig image step reviewed/redrawn in the app, then instant frames). The phase0
   knight rerun above is moot if the rig method is adopted.
+## Remedies built (2026-10-30, owner agreed all five)
+
+- 6b445fd: head turns with the template; elbows/knees bend on skinned meshes; capes, skirts and long hair swing
+  (cloth.py); open-palm hand image for A7 frames 4-6; optional AI finishing pass (finish.py) that keeps the rig's
+  head, hands and outline. GPU runs: C:/AnimGen/venv/Scripts/python.exe (the dev venv has no torch).
+- Next: integrate into the app: rig step (rig image + hand image, owner reviews/redraws), instant generation,
+  "AI finishing" checkbox (off), hanging-part on/off in the skeleton editor; republish with the app closed.
