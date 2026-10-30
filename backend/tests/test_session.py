@@ -255,3 +255,47 @@ def test_bad_skeleton_points_refused(session, hero):
     with pytest.raises(AppError) as e:
         session.confirm_skeleton(bad)
     assert e.value.code == "skeleton_incomplete"
+
+
+# ---------------------------------------------------------------------------------------------- rig
+
+
+def test_rig_is_saved_per_image_and_dropped_with_a_new_skeleton(tmp_path, hero):
+    from animgen.engines.demo import DemoEngine
+    from animgen.session import Session
+    s = Session(DemoEngine(), tmp_path / "d", require_confirmed_skeleton=True, require_rig=True)
+    ch = s.set_character(str(hero))
+    s.confirm_skeleton(ch.view_points())
+    t = run(lambda task: s.generate(task, "idle"))
+    assert t.state == "failed" and t.error["code"] == "rig_missing"
+    t = run(lambda task: s.make_rig(task, seed=3))
+    assert t.state == "completed", t.error
+    assert s.rig is not None and s.state()["rig"]["seed"] == 3
+    t = run(lambda task: s.generate(task, "walk", seed=1))
+    assert t.state == "completed", t.error and s.state()["complete"]
+    s.close()
+
+    s2 = Session(DemoEngine(), tmp_path / "d", require_confirmed_skeleton=True, require_rig=True)
+    ch = s2.set_character(str(hero))                     # same image: the saved skeleton and rig come back
+    assert s2.rig is not None and s2.rig.seed == 3
+    pts = ch.view_points()
+    pts[4] = [pts[4][0] + 20, pts[4][1]]
+    s2.confirm_skeleton(pts)                              # a different skeleton: the rig was drawn for the old one
+    assert s2.rig is None and s2.state()["rig"] is None
+    s2.close()
+
+
+def test_rig_frames_are_the_same_every_time_unless_finished(session, hero):
+    session.set_character(str(hero))
+    assert run(lambda task: session.make_rig(task, seed=2)).state == "completed"
+    run(lambda task: session.generate(task, "a7", seed=1))
+    first = [np.array(Image.open(f["preview"])) for f in session.state()["frames"]]
+    run(lambda task: session.generate(task, "a7", seed=99))
+    again = [np.array(Image.open(f["preview"])) for f in session.state()["frames"]]
+    assert all((a == b).all() for a, b in zip(first, again))
+    with pytest.raises(AppError) as e:
+        session.regenerate(None, 2)
+    assert e.value.code == "nothing_to_redraw"
+    t = run(lambda task: session.generate(task, "a7", seed=1, finish=True))
+    assert t.state == "completed", t.error
+    assert session.state()["finished"] is True

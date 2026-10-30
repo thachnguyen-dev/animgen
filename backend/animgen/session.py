@@ -5,6 +5,11 @@ and every finished frame is mirrored back on the way out, so the owner always ge
 
 The app draws characters without weapons (owner, 2026-10-30): the owner attaches weapons in the game. Animations
 made for a weapon draw the hands closed, and the export says where the weapon hand is in every frame.
+
+Frames come from the character's rig (owner, 2026-10-30, DECISIONS.md "Layered cut-out character"): after the
+skeleton, the AI draws the character once in a spread pose and once with an open hand (``make_rig``); every frame
+is then those pieces bent onto the template (rig.py), in seconds, optionally repainted lightly (finish.py). The rig
+is saved by image content like the skeleton, and used while its skeleton is the confirmed one.
 """
 
 from __future__ import annotations
@@ -22,7 +27,10 @@ from pathlib import Path
 from PIL import Image
 
 from . import config
+from .authoring import Pose, solve
 from .engines.base import Engine, EngineError, FrameRequest
+from .finish import finish as finish_frame
+from .rig import Rig, build_rig
 from .errors import AppError
 from .frames import Placement, clean_alpha, fit_to_canvas, place_reference, validate_image
 from .imaging import pick_background_colour, save_png
@@ -59,6 +67,26 @@ class Character:
                              "source": self.skeleton_source, "confirmed": self.skeleton_confirmed}}
 
 
+# The rig drawings (rig_proto.py prototype, 2026-10-30): the spread pose keeps every limb clear of the others; the
+# hand image has the near arm straight forward with an open palm.
+RIG_POSE = Pose(spine=2, head=0, r_sh=40, r_el=20, l_sh=-40, l_el=20, r_hip=28, r_knee=6, l_hip=-26, l_knee=10)
+RIG_PROMPT = "standing, wide stride, legs apart, one arm forward, one arm back, clenched fists"
+RIG_STRENGTH = 0.6
+HAND_POSE = Pose(spine=2, head=0, r_sh=90, r_el=0, l_sh=-40, l_el=20, r_hip=28, r_knee=6, l_hip=-26, l_knee=10)
+HAND_PROMPT = "standing, arm outstretched forward, open palm, fingers spread"
+HAND_STRENGTH = 0.75
+HANGING_TINT = {"cape": (255, 140, 0), "skirt": (0, 160, 255), "hair": (200, 0, 255)}
+
+
+@dataclass
+class RigState:
+    rig: Rig
+    seed: int
+    still: set = field(default_factory=set)      # hanging parts the owner turned off: they stay as drawn
+    view: Path | None = None                     # the assembled character, hanging parts tinted, own facing
+    hand_view: Path | None = None                # the hand image, own facing
+
+
 @dataclass
 class Slot:
     skeleton: Skeleton | None = None
@@ -70,17 +98,24 @@ class Slot:
     attempts: int = 0
     preview: Path | None = None
     candidate_preview: Path | None = None
+    swing: dict = field(default_factory=dict)    # rig frames: the hanging parts' angles in this frame
+    open_hands: tuple = ()
 
 
 class Session:
     def __init__(self, engine: Engine, data_dir: Path, auto_retries: int = config.DEFAULT_AUTO_RETRIES,
-                 require_confirmed_skeleton: bool = False) -> None:
+                 require_confirmed_skeleton: bool = False, require_rig: bool = False) -> None:
         self.engine = engine
         self.data_dir = Path(data_dir)
         # The app asks the owner to confirm the character's skeleton before generating (DECISIONS.md, "Character
         # skeleton set by the owner"); scripts and tests use the detected one as it is.
         self.require_confirmed_skeleton = require_confirmed_skeleton
+        # The app makes every frame from the rig; scripts may still draw each frame with the AI (phase0).
+        self.require_rig = require_rig
         self.skeleton_dir = self.data_dir / "skeletons"
+        self.rig_dir = self.data_dir / "rigs"
+        self.rig: RigState | None = None
+        self.finished = False           # the frames had the AI finishing pass
         temp_root = self.data_dir / "temp"
         temp_root.mkdir(parents=True, exist_ok=True)
         # Proposed retention (§10.6): this session's frames live until exit; older sessions are removed on start.
@@ -146,6 +181,8 @@ class Session:
             self.background = pick_background_colour(placement.image)
             self._reset_frames()
             self.template = None
+            self.rig = None
+        self._load_rig()
         return self.character
 
     def confirm_skeleton(self, points: list) -> Character:
@@ -177,9 +214,11 @@ class Session:
             ch.skeleton_source, ch.skeleton_confirmed = "saved", True
             self._reset_frames()
             self.template = None
+            self.rig = None
         self.skeleton_dir.mkdir(parents=True, exist_ok=True)
         with open(self.skeleton_dir / f"{ch.key}.json", "w", encoding="utf-8") as f:
             json.dump({"facing": ch.facing, "points": view.to_json()}, f, ensure_ascii=False)
+        self._load_rig()                # a rig drawn for this very skeleton (the owner confirmed it unchanged)
         return ch
 
     def _load_skeleton(self, key: str) -> dict | None:
@@ -206,6 +245,148 @@ class Session:
         self.slots = [Slot() for _ in range(config.FRAME_COUNT)]
 
     # ------------------------------------------------------------------------------------------------------------
+    # Rig
+    # ------------------------------------------------------------------------------------------------------------
+    def _rig_skeletons(self) -> tuple[Skeleton, Skeleton]:
+        """The spread pose and the hand pose, fitted to the character as the templates are."""
+        ch = self.character
+        assert ch is not None
+        rest = load_template("idle").rest
+        props = measure(ch.skeleton, rest, ch.placement.figure_height, ch.placement.anchor[1])
+        out = []
+        for pose in (RIG_POSE, HAND_POSE):
+            pts, _ = solve(pose)
+            tpl = Skeleton([None if p is None else (p[0], p[1]) for p in pts])
+            out.append(fit_frame(tpl, rest, props, ch.placement.anchor, True))
+        return out[0], out[1]
+
+    def make_rig(self, task: Task, seed: int | None = None) -> dict:
+        """The AI draws the rig image and the hand image (two drawings, about a minute each on the RTX 4060)."""
+        ch = self.character
+        if ch is None:
+            raise AppError("no_character")
+        if self.require_confirmed_skeleton and not ch.skeleton_confirmed:
+            raise AppError("skeleton_unconfirmed")
+        self._ensure_loaded(task)
+        seed = seed if seed is not None else random.randint(1, 2**31 - 1)
+        rig_sk, hand_sk = self._rig_skeletons()
+        task.update(stage="generating", total=2, done=0, message="Đang vẽ khung nhân vật (1/2)…")
+        images = []
+        for n, (sk, prompt, strength) in enumerate(((rig_sk, RIG_PROMPT, RIG_STRENGTH),
+                                                    (hand_sk, HAND_PROMPT, HAND_STRENGTH))):
+            task.check_cancel()
+            if n:
+                task.update(message="Đang vẽ bàn tay mở (2/2)…")
+            req = FrameRequest(reference=ch.placement.image, reference_skeleton=ch.skeleton, target_skeleton=sk,
+                               background=self.background, prompt=prompt, seed=(seed + n) % (2**31 - 1),
+                               hands_gripping=False, extra={"strength": strength})
+            try:
+                images.append(self.engine.remover.remove(self.engine.drawer.draw(req), self.background))
+            except EngineError as exc:
+                if exc.kind == "oom":
+                    self.engine.free_memory()
+                    raise AppError("gpu_out_of_memory") from exc
+                raise AppError("inference_failed", detail=exc.detail or exc.kind) from exc
+            task.update(done=n + 1)
+        folder = self.rig_dir / ch.key
+        folder.mkdir(parents=True, exist_ok=True)
+        save_png(images[0], folder / "rig.png")
+        save_png(images[1], folder / "hand.png")
+        with open(folder / "rig.json", "w", encoding="utf-8") as f:
+            json.dump({"seed": seed, "skeleton": ch.skeleton.to_json(), "still": []}, f, ensure_ascii=False)
+        with self._lock:
+            self._reset_frames()
+            self.template = None
+        self._load_rig()
+        if self.rig is None:
+            raise AppError("rig_failed")
+        return self.state()
+
+    def _load_rig(self) -> None:
+        """The saved rig of this image, if it was drawn for the current skeleton."""
+        ch = self.character
+        with self._lock:
+            self.rig = None
+        if ch is None:
+            return
+        folder = self.rig_dir / ch.key
+        try:
+            with open(folder / "rig.json", encoding="utf-8") as f:
+                info = json.load(f)
+            saved = [None if p is None else (round(float(p[0])), round(float(p[1]))) for p in info["skeleton"]]
+        except (OSError, ValueError, KeyError, TypeError):
+            return
+        now = [None if p is None else (round(p[0]), round(p[1])) for p in ch.skeleton.points]
+        if saved != now or not (folder / "rig.png").exists():
+            return
+        rig_sk, hand_sk = self._rig_skeletons()
+        try:
+            with Image.open(folder / "rig.png") as im:
+                rig_img = im.convert("RGBA")
+            hand_img = None
+            if (folder / "hand.png").exists():
+                with Image.open(folder / "hand.png") as im:
+                    hand_img = im.convert("RGBA")
+            rig = build_rig(ch.placement.image, ch.skeleton, rig_img, rig_sk, hand_img, hand_sk)
+        except Exception as exc:  # noqa: BLE001
+            import sys
+            print(f"rig not usable: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return
+        state = RigState(rig, int(info.get("seed", 0)), set(info.get("still", [])))
+        state.view = self.temp / f"rig_view_{uuid.uuid4().hex[:8]}.png"
+        save_png(self._own_facing(self._rig_view(rig, rig_sk, state.still)), state.view)
+        if hand_img is not None:
+            state.hand_view = self.temp / f"hand_view_{uuid.uuid4().hex[:8]}.png"
+            save_png(self._own_facing(hand_img), state.hand_view)
+        with self._lock:
+            self.rig = state
+
+    def _rig_view(self, rig: Rig, rig_sk: Skeleton, still: set) -> Image.Image:
+        """The assembled character in the spread pose, each hanging part that swings tinted in its colour."""
+        import numpy as np
+        img = np.array(rig.render(rig_sk))
+        for mesh in rig.meshes:
+            for part in mesh.hanging:
+                if part.name in still or part.mask is None:
+                    continue
+                m = part.mask & (img[..., 3] > 0)
+                tint = np.array(HANGING_TINT.get(part.name, (255, 255, 0)), np.float32)
+                img[m, :3] = (img[m, :3] * 0.55 + tint * 0.45).astype(np.uint8)
+        return Image.fromarray(img, "RGBA")
+
+    def _own_facing(self, image: Image.Image) -> Image.Image:
+        ch = self.character
+        if ch is not None and ch.placement.mirrored:
+            return image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        return image
+
+    def set_hanging(self, name: str, on: bool) -> dict:
+        """Turn a hanging part's swing on or off (the owner's correction of the automatic detection)."""
+        ch, state = self.character, self.rig
+        if ch is None or state is None:
+            raise AppError("rig_missing")
+        if name not in {p.name for m in state.rig.meshes for p in m.hanging}:
+            raise AppError("unknown_part")
+        with self._lock:
+            if on:
+                state.still.discard(name)
+            else:
+                state.still.add(name)
+        path = self.rig_dir / ch.key / "rig.json"
+        try:
+            with open(path, encoding="utf-8") as f:
+                info = json.load(f)
+            info["still"] = sorted(state.still)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(info, f, ensure_ascii=False)
+        except (OSError, ValueError):
+            pass
+        rig_sk, _ = self._rig_skeletons()
+        state.view = self.temp / f"rig_view_{uuid.uuid4().hex[:8]}.png"
+        save_png(self._own_facing(self._rig_view(state.rig, rig_sk, state.still)), state.view)
+        return self.state()
+
+    # ------------------------------------------------------------------------------------------------------------
     # Animation choice
     # ------------------------------------------------------------------------------------------------------------
     def prepare(self, animation_id: str) -> MotionTemplate:
@@ -228,31 +409,45 @@ class Session:
     # Generation
     # ------------------------------------------------------------------------------------------------------------
     def generate(self, task: Task, animation_id: str, grip: bool | None = None, seed: int | None = None,
-                 only: list[int] | None = None) -> dict:
-        """Draw the animation. ``grip``: the owner's choice where the template leaves it open. ``only``: frame
-        indices (0-based) to draw, for cheaper test runs; the others stay empty and the animation cannot export."""
+                 only: list[int] | None = None, finish: bool = False) -> dict:
+        """Make the animation. ``grip``: the owner's choice where the template leaves it open. ``only``: frame
+        indices (0-based) to make, for cheaper test runs; the others stay empty and the animation cannot export.
+        ``finish``: with a rig, also the AI finishing pass (off by default, owner 2026-10-30)."""
         template = self.prepare(animation_id)
         ch = self.character
         assert ch is not None
+        if self.require_rig and self.rig is None:
+            raise AppError("rig_missing")
         with self._lock:
             self.template = template
             self.grip = template.gripping(grip)
+            self.finished = bool(finish) and self.rig is not None
             self._reset_frames()
             self.run_seed = seed if seed is not None else random.randint(1, 2**31 - 1)
             self.props = measure(ch.skeleton, template.rest, ch.placement.figure_height, ch.placement.anchor[1])
             for i, tf in enumerate(template.frames):
                 self.slots[i].skeleton = fit_frame(tf.skeleton, template.rest, self.props, ch.placement.anchor,
                                                    tf.grounded)
-        self._ensure_loaded(task)
+                self.slots[i].open_hands = tf.open_hands
+            if self.rig is not None:
+                # The hanging parts swing over the whole animation, so their angles are worked out for all frames.
+                swings = self.rig.rig.swings([s.skeleton for s in self.slots], loop=template.animation != "attack")
+                for slot, sw in zip(self.slots, swings):
+                    slot.swing = {k: v for k, v in sw.items() if k not in self.rig.still}
+        if self.rig is None or self.finished:
+            self._ensure_loaded(task)
         indices = list(range(config.FRAME_COUNT)) if only is None else sorted({self._index(i + 1) for i in only})
         self._run_frames(task, indices, regenerate=False)
         return self.state()
 
     def regenerate(self, task: Task, frame: int | None) -> dict:
         """Regenerate one frame (1..8) or the whole animation (None). Good frames are never overwritten: the new
-        attempt is kept as a candidate next to the current frame until the owner accepts it (§8.3)."""
+        attempt is kept as a candidate next to the current frame until the owner accepts it (§8.3). Rig frames
+        without the finishing pass come out the same every time, so there is nothing to redraw."""
         if self.template is None:
             raise AppError("no_frames")
+        if self.rig is not None and not self.finished:
+            raise AppError("nothing_to_redraw")
         indices = list(range(config.FRAME_COUNT)) if frame is None else [self._index(frame)]
         self._ensure_loaded(task)
         with self._lock:
@@ -312,6 +507,24 @@ class Session:
             if attempt:
                 task.update(stage="retrying", attempt=attempt,
                             message=f"Khung {i + 1} lỗi ({last_reason}), thử lại lần {attempt}/{self.auto_retries}")
+            seed = (self.run_seed + i * 7919 + attempt * 104729) % (2**31 - 1)
+            if self.rig is not None:
+                try:
+                    rgba = self._rig_frame(slot, tpl, seed)
+                except EngineError as exc:
+                    if exc.kind == "models_missing":
+                        raise AppError("models_missing", detail=exc.detail) from exc
+                    last_reason = "hết bộ nhớ GPU" if exc.kind == "oom" else exc.detail or exc.kind
+                    if exc.kind == "oom":
+                        self.engine.free_memory()
+                    continue
+                check = validate_image(rgba, (config.CANVAS_SIZE, config.CANVAS_SIZE))
+                if not check.ok:
+                    last_reason = check.reason
+                    continue
+                path = self.temp / "frames" / f"f{i + 1}_{uuid.uuid4().hex[:8]}.png"
+                save_png(rgba, path)
+                return True, path, None, attempt + 1
             req = FrameRequest(reference=ch.placement.image, reference_skeleton=ch.skeleton,
                                target_skeleton=slot.skeleton, background=self.background, prompt=tpl.prompt,
                                seed=(self.run_seed + i * 7919 + attempt * 104729) % (2**31 - 1),
@@ -339,6 +552,16 @@ class Session:
         err = AppError("frame_failed_after_retries", frame=i + 1, tries=tries).to_json()
         err["params"]["reason"] = last_reason
         return False, None, err, tries
+
+    def _rig_frame(self, slot: Slot, tpl: MotionTemplate, seed: int) -> Image.Image:
+        """One frame from the rig, with the finishing pass when it was asked for. Placed by the template already."""
+        ch, state = self.character, self.rig
+        assert ch is not None and state is not None and slot.skeleton is not None
+        image, keep = state.rig.render_keep(slot.skeleton, slot.swing, slot.open_hands)
+        if not self.finished:
+            return image
+        return finish_frame(self.engine, image, keep, ch.placement.image, ch.skeleton, slot.skeleton,
+                            self.background, tpl.prompt, seed, self.grip, slot.open_hands)
 
     # ------------------------------------------------------------------------------------------------------------
     # Accept / keep
@@ -461,6 +684,14 @@ class Session:
                 "animation": None if tpl is None else {"id": tpl.id, "name_vi": tpl.name_vi, "status": tpl.status,
                                                        "grip": tpl.grip},
                 "grip": self.grip,
+                "finished": self.finished,
+                "rig": None if self.rig is None else {
+                    "seed": self.rig.seed,
+                    "view": str(self.rig.view) if self.rig.view else None,
+                    "hand_view": str(self.rig.hand_view) if self.rig.hand_view else None,
+                    "hanging": [{"name": p.name, "on": p.name not in self.rig.still}
+                                for m in self.rig.rig.meshes for p in m.hanging],
+                },
                 "auto_retries": self.auto_retries,
                 "frames": [{
                     "index": n + 1, "status": s.status, "attempts": s.attempts, "error": s.error,

@@ -45,6 +45,7 @@ class Hanging:
     pivot: np.ndarray           # bind pose
     length: float               # px from the pivot to the hem
     factor: np.ndarray          # per vertex of its mesh: 0 = still, 1 = turns the full swing angle
+    mask: np.ndarray | None = None   # bind-pose pixels of the part (for showing it to the owner)
 
 
 def find_hanging(verts: np.ndarray, torso_mask: np.ndarray, head_mask: np.ndarray, bind: dict,
@@ -84,7 +85,7 @@ def find_hanging(verts: np.ndarray, torso_mask: np.ndarray, head_mask: np.ndarra
         vx = np.clip(verts[:, 0].astype(int), 0, w - 1)
         vy = np.clip(verts[:, 1].astype(int), 0, h - 1)
         s = np.clip(((verts - pivot) @ d) / reach, 0, 1)
-        found.append(Hanging(name, bone, pivot, reach, soft[vy, vx] * s * s * (3 - 2 * s)))
+        found.append(Hanging(name, bone, pivot, reach, soft[vy, vx] * s * s * (3 - 2 * s), mask))
     return found
 
 

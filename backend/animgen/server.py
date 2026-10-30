@@ -12,7 +12,12 @@ Routes (all JSON):
   GET  /animations                     -> [{id, name_vi, ready, grip, weapon_kinds, status}]
   GET  /state                          -> session state (frames, previews, candidates, ...)
   POST /character {path, facing?, name?}
-  POST /generate {animation, grip?: bool, seed?} -> {task}   (grip: hands closed, where the animation leaves it open)
+  POST /character/skeleton {points}
+  POST /rig {seed?}                    -> {task}   (the AI draws the character's rig and hand images)
+  POST /rig/hanging {name, on: bool}   -> state    (a cape, skirt or hair swings or stays as drawn)
+  POST /generate {animation, grip?: bool, seed?, finish?: bool} -> {task}
+                                       (grip: hands closed, where the animation leaves it open;
+                                        finish: the AI finishing pass, off by default)
   POST /regenerate {frame?: 1..8}      -> {task}
   POST /accept {frame}   POST /keep {frame}   POST /accept_all
   POST /export {folder, height}        -> {task}
@@ -87,7 +92,7 @@ class App:
                 t = self.runner.get(parts[1])
                 return (404, {"error": {"code": "not_found", "message": "task"}}) if t is None else (200, t.to_json())
         if method == "POST":
-            busy_guard = parts[:1] in (["character"], ["accept"], ["keep"], ["accept_all"], ["settings"])
+            busy_guard = parts[:1] in (["character"], ["accept"], ["keep"], ["accept_all"], ["settings"], ["rig"])
             if busy_guard and self.runner.busy():
                 raise AppError("busy")
             if parts == ["character"]:
@@ -96,15 +101,33 @@ class App:
             if parts == ["character", "skeleton"]:
                 ch = s.confirm_skeleton(_req(body, "points", list))
                 return 200, {"character": ch.to_json(), "state": s.state()}
+            if parts == ["rig"]:
+                if s.character is None:
+                    raise AppError("no_character")
+                if s.require_confirmed_skeleton and not s.character.skeleton_confirmed:
+                    raise AppError("skeleton_unconfirmed")
+                seed = body.get("seed")
+                t = self.runner.start("rig", lambda task: s.make_rig(task, int(seed) if seed is not None else None))
+                return 200, {"task": t.to_json()}
+            if parts == ["rig", "hanging"]:
+                on = body.get("on")
+                if not isinstance(on, bool):
+                    raise AppError("bad_request", detail="on must be true or false")
+                return 200, s.set_hanging(_req(body, "name", str), on)
             if parts == ["generate"]:
                 anim = _req(body, "animation", str)
                 grip = body.get("grip")
                 if grip is not None and not isinstance(grip, bool):
                     raise AppError("bad_request", detail="grip must be true or false")
+                finish = body.get("finish", False)
+                if not isinstance(finish, bool):
+                    raise AppError("bad_request", detail="finish must be true or false")
                 seed = body.get("seed")
                 s.prepare(anim)  # fail fast on a bad choice, before a task starts
-                t = self.runner.start("generate", lambda task: s.generate(task, anim, grip,
-                                                                          int(seed) if seed is not None else None))
+                if s.require_rig and s.rig is None:
+                    raise AppError("rig_missing")
+                t = self.runner.start("generate", lambda task: s.generate(
+                    task, anim, grip, int(seed) if seed is not None else None, finish=finish))
                 return 200, {"task": t.to_json()}
             if parts == ["regenerate"]:
                 frame = body.get("frame")
@@ -112,6 +135,8 @@ class App:
                     s._index(int(frame))
                 if s.template is None:
                     raise AppError("no_frames")
+                if s.rig is not None and not s.finished:
+                    raise AppError("nothing_to_redraw")
                 t = self.runner.start("regenerate",
                                       lambda task: s.regenerate(task, int(frame) if frame is not None else None))
                 return 200, {"task": t.to_json()}
@@ -252,7 +277,8 @@ def serve(engine_name: str, data_dir: Path, models_dir: Path, token: str, port: 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
-    session = Session(make_engine(engine_name, models_dir), data_dir, require_confirmed_skeleton=True)
+    session = Session(make_engine(engine_name, models_dir), data_dir, require_confirmed_skeleton=True,
+                      require_rig=True)
     app = App(session, token)
     httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app))
     httpd.daemon_threads = True

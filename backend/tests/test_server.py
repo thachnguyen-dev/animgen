@@ -87,6 +87,20 @@ def test_full_flow(server, tmp_path):
     st, err = call(server, "POST", "/generate", {"animation": "walk", "grip": "yes"})
     assert st == 400 and err["error"]["code"] == "bad_request"
 
+    # then the character's rig: the AI draws it once, and every frame is made from it
+    st, err = call(server, "POST", "/generate", {"animation": "a2"})
+    assert st == 400 and err["error"]["code"] == "rig_missing"
+    st, r = call(server, "POST", "/rig", {"seed": 5})
+    task = wait_task(server, r["task"]["id"])
+    assert task["state"] == "completed", task
+    rig = task["result"]["rig"]
+    assert rig["seed"] == 5 and Path(rig["view"]).is_file() and Path(rig["hand_view"]).is_file()
+    for part in rig["hanging"]:                         # the owner can stop a hanging part from swinging
+        st, state = call(server, "POST", "/rig/hanging", {"name": part["name"], "on": False})
+        assert st == 200 and not [h for h in state["rig"]["hanging"] if h["name"] == part["name"]][0]["on"]
+    st, err = call(server, "POST", "/rig/hanging", {"name": "tail", "on": False})
+    assert st == 400 and err["error"]["code"] == "unknown_part"
+
     st, r = call(server, "POST", "/generate", {"animation": "a2"})
     assert st == 200
     # one task at a time
@@ -96,7 +110,16 @@ def test_full_flow(server, tmp_path):
     assert st2 == 200 or busy["error"]["code"] == "busy"
     st, state = call(server, "GET", "/state")
     assert state["complete"] and all(Path(f["preview"]).is_file() for f in state["frames"])
-    assert state["grip"] is True and state["animation"]["grip"] == "always"
+    assert state["grip"] is True and state["animation"]["grip"] == "always" and state["finished"] is False
+    # rig frames come out the same every time: only finished frames can be redrawn
+    st, err = call(server, "POST", "/regenerate", {"frame": 3})
+    assert st == 400 and err["error"]["code"] == "nothing_to_redraw"
+    st, err = call(server, "POST", "/generate", {"animation": "a2", "finish": "yes"})
+    assert st == 400 and err["error"]["code"] == "bad_request"
+    st, r = call(server, "POST", "/generate", {"animation": "a2", "finish": True})
+    assert wait_task(server, r["task"]["id"])["state"] == "completed"
+    _, state = call(server, "GET", "/state")
+    assert state["complete"] and state["finished"] is True
 
     st, r = call(server, "POST", "/regenerate", {"frame": 3})
     wait_task(server, r["task"]["id"])
