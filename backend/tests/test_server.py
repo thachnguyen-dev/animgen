@@ -73,6 +73,14 @@ def test_full_flow(server, tmp_path):
                                                                       "a5", "a6"}
     st, r = call(server, "POST", "/character", {"path": str(hero), "name": "Hiệp sĩ"})
     assert st == 200 and r["character"]["facing_source"] == "assumed"
+    skel = r["character"]["skeleton"]
+    assert not skel["confirmed"] and Path(skel["image"]).is_file() and len(skel["points"]) == 18
+
+    # the app asks for the skeleton to be confirmed before anything is generated
+    st, err = call(server, "POST", "/generate", {"animation": "idle"})
+    assert st == 400 and err["error"]["code"] == "skeleton_unconfirmed"
+    st, r = call(server, "POST", "/character/skeleton", {"points": skel["points"]})
+    assert st == 200 and r["character"]["skeleton"]["confirmed"]
 
     sw, g, t = synth.sword(tmp_path / "sw.png")
     st, w = call(server, "POST", "/weapons", {"name": "Kiếm", "kind": "one_handed", "skin": "bạc",

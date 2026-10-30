@@ -9,6 +9,8 @@ new skin is only a recombine and all skins have exactly the same motion.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import random
 import shutil
 import threading
@@ -25,7 +27,7 @@ from .errors import AppError
 from .frames import Placement, clean_alpha, fit_to_canvas, place_reference, validate_image
 from .imaging import pick_background_colour, save_png
 from .inputs import CharacterInput, check_character
-from .skeleton import Proportions, Skeleton, fit_frame, measure
+from .skeleton import LANK, LHIP, NECK, RANK, RHIP, Proportions, Skeleton, fit_frame, measure
 from .tasks import Task
 from .templates import MotionTemplate, load_template, ANIMATIONS
 from .weapons import WeaponStore, combine, hand_point, transform_weapon, weapon_clipped
@@ -38,12 +40,24 @@ class Character:
     placement: Placement
     skeleton: Skeleton          # on the canvas, facing right
     facing: str                 # 'right' or 'left' (the character's own facing)
-    facing_source: str          # 'detected', 'assumed' or 'owner'
+    facing_source: str          # 'detected', 'assumed', 'owner' or 'saved'
     name: str
+    key: str = ""               # content hash of the image file: where its confirmed skeleton is saved
+    skeleton_source: str = "detected"   # 'detected' (DWPose), 'proportions' (fallback) or 'saved' (owner)
+    skeleton_confirmed: bool = False
+    view_image: Path | None = None      # the canvas image in the character's own facing, for the skeleton editor
+
+    def view_points(self) -> list:
+        """The skeleton on ``view_image`` (the character's own facing), as the editor shows it."""
+        sk = self.skeleton.mirrored(self.placement.image.width) if self.placement.mirrored else self.skeleton
+        return sk.to_json()
 
     def to_json(self) -> dict:
         return {**self.input.summary(), "facing": self.facing, "facing_source": self.facing_source,
-                "name": self.name, "placement": self.placement.to_json()}
+                "name": self.name, "placement": self.placement.to_json(),
+                "skeleton": {"image": str(self.view_image) if self.view_image else None,
+                             "size": self.placement.image.width, "points": self.view_points(),
+                             "source": self.skeleton_source, "confirmed": self.skeleton_confirmed}}
 
 
 @dataclass
@@ -67,9 +81,14 @@ class WeaponChoice:
 
 
 class Session:
-    def __init__(self, engine: Engine, data_dir: Path, auto_retries: int = config.DEFAULT_AUTO_RETRIES) -> None:
+    def __init__(self, engine: Engine, data_dir: Path, auto_retries: int = config.DEFAULT_AUTO_RETRIES,
+                 require_confirmed_skeleton: bool = False) -> None:
         self.engine = engine
         self.data_dir = Path(data_dir)
+        # The app asks the owner to confirm the character's skeleton before generating (DECISIONS.md, "Character
+        # skeleton set by the owner"); scripts and tests use the detected one as it is.
+        self.require_confirmed_skeleton = require_confirmed_skeleton
+        self.skeleton_dir = self.data_dir / "skeletons"
         self.weapons = WeaponStore(self.data_dir / "weapons")
         temp_root = self.data_dir / "temp"
         temp_root.mkdir(parents=True, exist_ok=True)
@@ -98,7 +117,11 @@ class Session:
         """Check the image (§4.4), place it on the canvas and read its skeleton. Fast enough to run inline for the
         demo engine; with real models the pose reader needs DWPose (small, CPU is fine)."""
         ch_in = check_character(path)
+        key = hashlib.sha256(Path(path).read_bytes()).hexdigest()[:24]
+        saved = self._load_skeleton(key)
         source = "owner" if facing in ("left", "right") else "assumed"
+        if facing not in ("left", "right") and saved is not None:
+            facing, source = saved["facing"], "saved"
         placement = place_reference(ch_in, mirror=False)
         skel = self._read_pose(placement.image)
         if facing not in ("left", "right"):
@@ -111,18 +134,72 @@ class Session:
         if facing == "left":
             placement = place_reference(ch_in, mirror=True)
             skel = self._read_pose(placement.image)
+        skel_source = "detected"
         if skel is None or skel.points[1] is None:
             # No skeleton found: fall back to the standard proportions inside the figure's box.
             from .engines.demo import ProportionalPoseReader
             skel = ProportionalPoseReader().read(placement.image)
+            skel_source = "proportions"
+        confirmed = False
+        if saved is not None:
+            view = Skeleton([None if p is None else (float(p[0]), float(p[1])) for p in saved["points"]])
+            skel = view.mirrored(placement.image.width) if placement.mirrored else view
+            skel_source, confirmed = "saved", True
         assert skel is not None
+        view_image = self.temp / f"skeleton_view_{uuid.uuid4().hex[:8]}.png"
+        save_png(placement.image.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if placement.mirrored
+                 else placement.image, view_image)
         with self._lock:
             self.character = Character(ch_in, placement, skel, facing, source,
-                                       name or Path(path).stem)
+                                       name or Path(path).stem, key, skel_source, confirmed, view_image)
             self.background = pick_background_colour(placement.image)
             self._reset_frames()
             self.template = None
         return self.character
+
+    def confirm_skeleton(self, points: list) -> Character:
+        """The owner's skeleton, on the view image (the character's own facing). Saved by image content, so the same
+        image is not asked again; current frames are dropped because they were drawn from the old skeleton."""
+        ch = self.character
+        if ch is None:
+            raise AppError("no_character")
+        size = ch.placement.image.width
+        if not isinstance(points, list) or len(points) != len(ch.skeleton.points):
+            raise AppError("skeleton_invalid")
+        pts: list = []
+        for p in points:
+            if p is None:
+                pts.append(None)
+                continue
+            try:
+                x, y = float(p[0]), float(p[1])
+            except (TypeError, ValueError, IndexError) as exc:
+                raise AppError("skeleton_invalid") from exc
+            if not (0 <= x < size and 0 <= y < size):
+                raise AppError("skeleton_invalid")
+            pts.append((x, y))
+        if pts[NECK] is None or (pts[RHIP] is None and pts[LHIP] is None) or (pts[RANK] is None and pts[LANK] is None):
+            raise AppError("skeleton_incomplete")
+        view = Skeleton(pts)
+        with self._lock:
+            ch.skeleton = view.mirrored(size) if ch.placement.mirrored else view
+            ch.skeleton_source, ch.skeleton_confirmed = "saved", True
+            self._reset_frames()
+            self.template = None
+        self.skeleton_dir.mkdir(parents=True, exist_ok=True)
+        with open(self.skeleton_dir / f"{ch.key}.json", "w", encoding="utf-8") as f:
+            json.dump({"facing": ch.facing, "points": view.to_json()}, f, ensure_ascii=False)
+        return ch
+
+    def _load_skeleton(self, key: str) -> dict | None:
+        try:
+            with open(self.skeleton_dir / f"{key}.json", encoding="utf-8") as f:
+                d = json.load(f)
+        except (OSError, ValueError):
+            return None
+        if d.get("facing") in ("left", "right") and isinstance(d.get("points"), list):
+            return d
+        return None
 
     def _read_pose(self, image: Image.Image) -> Skeleton | None:
         """The pose reader's skeleton, or None (missing model files, nothing found): the caller then falls back to
@@ -156,6 +233,8 @@ class Session:
     def prepare(self, animation_id: str, weapon: WeaponChoice | None) -> MotionTemplate:
         if self.character is None:
             raise AppError("no_character")
+        if self.require_confirmed_skeleton and not self.character.skeleton_confirmed:
+            raise AppError("skeleton_unconfirmed")
         known = {a[0]: a for a in ANIMATIONS}
         if animation_id not in known:
             raise AppError("unknown_animation")

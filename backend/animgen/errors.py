@@ -29,6 +29,9 @@ MESSAGES_VI: dict[str, str] = {
     "weapon_wrong_kind": "Vũ khí này không hợp với kiểu đòn đã chọn.",
     # Generation
     "no_character": "Hãy chọn ảnh nhân vật trước.",
+    "skeleton_unconfirmed": "Hãy kiểm tra và xác nhận khung xương của nhân vật trước khi tạo.",
+    "skeleton_invalid": "Khung xương không hợp lệ: các khớp phải nằm trong ảnh.",
+    "skeleton_incomplete": "Khung xương cần ít nhất cổ, hông và cổ chân.",
     "unknown_animation": "Không có hoạt ảnh này.",
     "animation_not_ready": "Hoạt ảnh này chưa có trong phiên bản hiện tại.",
     "busy": "Đang có một việc khác chạy. Hãy chờ xong hoặc huỷ.",

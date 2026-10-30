@@ -193,3 +193,52 @@ def test_temp_folder_cleanup(tmp_path):
     s2 = Session(DemoEngine(), tmp_path / "d")  # next start removes the previous session's files
     assert not old.exists() and s2.temp.exists()
     s2.close()
+
+
+# ---------------------------------------------------------------------------------------------- skeleton confirm
+
+def test_skeleton_must_be_confirmed_when_required(tmp_path, hero):
+    from animgen.engines.demo import DemoEngine
+    from animgen.session import Session
+    s = Session(DemoEngine(), tmp_path / "d", require_confirmed_skeleton=True)
+    ch = s.set_character(str(hero))
+    assert ch.to_json()["skeleton"]["confirmed"] is False
+    with pytest.raises(AppError) as e:
+        s.prepare("idle", None)
+    assert e.value.code == "skeleton_unconfirmed"
+    s.confirm_skeleton(ch.view_points())
+    assert s.prepare("idle", None).id == "idle"
+    s.close()
+
+
+def test_confirmed_skeleton_is_saved_and_reused(session, tmp_path):
+    left = synth.character(tmp_path / "left.png", facing="left")
+    ch = session.set_character(str(left), "left")
+    pts = ch.view_points()
+    pts[4] = [pts[4][0] + 30, pts[4][1] - 40]          # the owner moves the right wrist on the view image
+    session.confirm_skeleton(pts)
+    again = session.set_character(str(left))             # same image, facing not given: both come from the save
+    j = again.to_json()["skeleton"]
+    assert again.facing == "left" and again.facing_source == "saved"
+    assert j["confirmed"] and j["source"] == "saved"
+    assert j["points"][4] == pytest.approx(pts[4], abs=0.01)
+    # internally the character faces right: the view points come back mirrored
+    w = again.placement.image.width
+    assert again.skeleton.points[4][0] == pytest.approx(w - 1 - pts[4][0], abs=0.01)
+
+
+def test_bad_skeleton_points_refused(session, hero):
+    ch = session.set_character(str(hero))
+    pts = ch.view_points()
+    with pytest.raises(AppError) as e:
+        session.confirm_skeleton(pts[:5])
+    assert e.value.code == "skeleton_invalid"
+    bad = list(pts)
+    bad[1] = [5000, 10]
+    with pytest.raises(AppError):
+        session.confirm_skeleton(bad)
+    bad = list(pts)
+    bad[1] = None
+    with pytest.raises(AppError) as e:
+        session.confirm_skeleton(bad)
+    assert e.value.code == "skeleton_incomplete"

@@ -101,6 +101,9 @@ class App:
             if parts == ["character"]:
                 ch = s.set_character(_req(body, "path", str), body.get("facing"), body.get("name"))
                 return 200, {"character": ch.to_json(), "state": s.state()}
+            if parts == ["character", "skeleton"]:
+                ch = s.confirm_skeleton(_req(body, "points", list))
+                return 200, {"character": ch.to_json(), "state": s.state()}
             if parts == ["weapons"]:
                 w = s.weapons.add(_req(body, "name", str), _req(body, "kind", str), str(body.get("skin", "")),
                                   list(_req(body, "images", list)))
@@ -286,7 +289,7 @@ def serve(engine_name: str, data_dir: Path, models_dir: Path, token: str, port: 
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
-    session = Session(make_engine(engine_name, models_dir), data_dir)
+    session = Session(make_engine(engine_name, models_dir), data_dir, require_confirmed_skeleton=True)
     app = App(session, token)
     httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app))
     httpd.daemon_threads = True
