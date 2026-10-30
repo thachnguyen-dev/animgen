@@ -97,6 +97,20 @@ Labels: **Owner** = chosen by the owner in this session. **Decided** = decided b
   0.6, with the same poses — **now the default**. Strength 0.5 changed little. Style tags ("thick outlines, bold
   lineart") gave the boldest lines but would force one line style on every character, so they are not used.
 
+## Input images: separate character and weapons (tested 2026-10-30) — Recommended to the owner
+
+- Test: the same pipeline with a temporary character already holding a sword (`dev/test_art/test_hero_sword.png`)
+  against the separate character + sword. Combined: the sword is cut out with the body part nearest to it and stays
+  roughly where it was while the arm moves — in Walk it floats beside an empty hand, in one frame it crosses the body
+  (`result_combined_walk.png`, `result_combined_idle.png`); the drawn ground shadow became stray lines under the
+  feet. Separate: the weapon follows the hand in every frame of A2 and the bow (`result_separate_a2.png`,
+  `result_separate_bow.png`), and skins, bow draw stages and regenerating without a weapon all depend on it.
+- Recommendation: character and weapons as separate images (the owner's own preference). Character: one figure,
+  full body, standing, seen from the side, empty hands, real transparent background, no ground shadow, hands a little
+  away from the body. Weapon: seen from the side, real transparent background, the same pixel scale as the character;
+  a bow as 3 images (rest, half drawn, fully drawn). The owner's existing pictures can be reused by erasing the weapon
+  from the hand and drawing the weapon on its own.
+
 ## Owner notes (2026-10-30) — Confirmed
 
 - The app is for the owner's personal use only, not commercial. Licences are therefore not a selection criterion;

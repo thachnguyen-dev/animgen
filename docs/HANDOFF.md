@@ -30,21 +30,24 @@ comes next, so a later session (on the PC or in the cloud) can pick it up. Decis
 characters holding weapons and cannot be used as weapon inputs; the owner has no separated art yet and asked for a
 recommendation (separate vs combined) after testing.
 
+## Done in the resumed session
+
+1. Full Phase 0 run with the new method: Idle, Walk, A2, A5 all 8/8 frames first try (DECISIONS.md).
+2. Line-weight A/B: IP-Adapter 0.8 is the default now.
+3. Separate vs combined input test: separate recommended to the owner (DECISIONS.md "Input images").
+4. Skeleton editor (backend + app dialog).
+5. Published to `C:\AnimGen`; moved-folder test on a throw-away copy passed (venv repaired, backend offline,
+   skeleton dialog, backend ends with the app).
+
 ## Next steps
 
-1. **GPU (owner's PC only):** full run with the new method — `python -m animgen.phase0 --data "C:\AnimGen"
-   --character dev\test_art\test_hero.png --sword … --bow …` (the arguments above). Judge frame consistency,
-   hands, weapon placement; tune `STRENGTH`, `CONTROL_SCALE`, `IP_ADAPTER_SCALE`, steps (`dev/tools/probe.py` for
-   single frames, `dev/tools/ab_run.py` for whole animations).
-2. **GPU:** separate vs combined comparison for the owner (a character holding the sword: `dev/tools/make_temp_art.py
-   … hero_sword`), then the recommendation.
-3. **Done:** the skeleton editor (backend + app dialog, see DECISIONS.md). Code-only work left: puppet improvements
-   with tests (`tests/test_puppet.py`).
-4. **Then:** publish (`scripts\publish.ps1 -Data C:\AnimGen`), offline test, moved-folder test; Phase 0 on the owner's
-   art when it exists.
+1. **GPU, when the owner has separated art:** Phase 0 on it; judge the skeleton pre-fill (DWPose) on the owner's
+   style, consistency and line weight; tune with `dev/tools/ab_run.py` + `dev/tools/ab_sheet.py`.
+2. **Optional:** a real-engine walkthrough in the published app (Generate from the UI on the GPU).
+3. **Code only:** puppet improvements with tests (`tests/test_puppet.py`).
 
 ## Notes for a cloud session
 
-No GPU there: the real engine, Phase 0 and all tuning need the owner's PC. Code-only work (step 3) and the test
+No GPU there: the real engine, Phase 0 and all tuning need the owner's PC. Code-only work (step 3 of Next steps) and the test
 suite (`backend/requirements-dev.txt`, `pytest`) run anywhere. Keep CRLF line endings and UTF-8 with BOM for
 PowerShell scripts.
