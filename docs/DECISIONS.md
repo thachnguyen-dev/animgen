@@ -251,6 +251,14 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   motion and by air drag ∝ speed²; templates walk in place, so the speed is how fast the planted foot slides back.
   The swing bends the part gradually from the pivot to the hem. Knight: cape still in idle, ~12° walking, ~30°
   running. Correcting the parts in the skeleton editor comes with the app integration.
+- Done (5), mine: a hand image per character (one AI drawing, near arm forward, open palm, strength 0.75); its hand
+  past HAND_CUT of the forearm replaces the fist in a second version of both arm meshes. Template frames name
+  their open hands (`"open": ["l"]`); A7 frames 4–6 open the far hand. Verified on knight and archer.
+- Done (4), mine (`animgen/finish.py`): the drawer repaints the rig frame at FINISH_STRENGTH 0.3 (the frame is
+  the starting picture, the pose guide as before). Afterwards the rig's head and visible hands are pasted back,
+  and the outline is clipped to the rig frame's (3 px slack, none near head and hands): even at 0.3 the drawer
+  opened fists and painted fingers around them (archer test). A frame without an open hand drops "open palm" from
+  its prompt. About 25 s per frame on the RTX 4060.
 
 ## Not done on purpose
 

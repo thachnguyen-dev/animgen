@@ -71,7 +71,8 @@ class Mesh:
     bones: tuple                        # k × (bind bone, frame bone)
     hanging: list[Hanging] = field(default_factory=list)
     open_hand: bool = False             # the arm with the open hand instead of the fist
-    head: np.ndarray | None = None      # the body mesh only: its head pixels alone (for the finishing pass)
+    keep: np.ndarray | None = None      # bind-pose mask (uint8) of the head and the hands: the finishing pass
+                                        # puts these back from the rig, as the AI drifts on faces and hands
 
 
 @dataclass
@@ -80,18 +81,22 @@ class Rig:
     bind: dict                          # bind bone name -> (a, b)
     size: tuple[int, int]
 
-    def render(self, target: Skeleton, swing: dict[str, float] | None = None, open_hands: tuple = (),
-               head_only: bool = False) -> Image.Image:
+    def render(self, target: Skeleton, swing: dict[str, float] | None = None, open_hands: tuple = ()) -> Image.Image:
         """The character in the target pose (RGBA, canvas-sized, transparent around). ``swing``: the hanging parts'
         angles (``swings``); without it they hang as drawn. ``open_hands``: "r" near, "l" far, drawn open when the
-        rig has an open hand. ``head_only``: the head alone, where it is in this pose."""
+        rig has an open hand."""
+        return self.render_keep(target, swing, open_hands)[0]
+
+    def render_keep(self, target: Skeleton, swing: dict[str, float] | None = None,
+                    open_hands: tuple = ()) -> tuple[Image.Image, np.ndarray]:
+        """``render`` and a mask of where the head and the hands show in the frame (not where something covers
+        them), for the finishing pass."""
         w, h = self.size
         out = np.zeros((h, w, 4), np.uint8)
+        keep = np.zeros((h, w), bool)
         frame = _target_bones(target)
         has_open = {m.name for m in self.meshes if m.open_hand}
         for mesh in self.meshes:
-            if head_only and mesh.head is None:
-                continue
             if mesh.name in has_open:
                 wanted = ("r" if mesh.name == "arm" else "l") in open_hands
                 if mesh.open_hand != wanted:
@@ -103,13 +108,15 @@ class Rig:
             for part in mesh.hanging:
                 if swing and swing.get(part.name):
                     verts = bend(verts, part, swing[part.name])
-            moved = _deform(mesh, mats, (h, w), verts, mesh.head if head_only else mesh.rgba)
+            moved = _deform(mesh, mats, (h, w), verts, mesh.rgba)
+            if mesh.keep is not None:
+                held = _deform(mesh, mats, (h, w), verts, np.dstack([mesh.keep] * 4))[..., 3] > 127
+                keep = (keep & ~(moved[..., 3] > 127)) | held
             k = moved[..., 3:4].astype(np.float32) / 255
             out[..., :3] = (moved[..., :3] * k + out[..., :3] * (1 - k)).astype(np.uint8)
             out[..., 3] = np.maximum(out[..., 3], moved[..., 3])
-        if not head_only:
-            _drop_specks(out)
-        return Image.fromarray(out, "RGBA")
+        _drop_specks(out)
+        return Image.fromarray(out, "RGBA"), keep & (out[..., 3] > 0)
 
     def swings(self, targets: list[Skeleton], loop: bool) -> list[dict[str, float]]:
         """The hanging parts' angles in each frame of an animation (``loop``: it repeats, as idle, walk, run)."""
@@ -401,7 +408,9 @@ def build_rig(original: Image.Image, original_sk: Skeleton, rig_image: Image.Ima
             mesh.open_hand = open_hand
         if mesh is not None and name == "body":
             mesh.hanging = find_hanging(mesh.verts, owner == 1, owner == 2, bind, _figure_height(rig_sk))
-            mesh.head = np.where((owner == 2)[..., None], rgba, 0).astype(np.uint8)
+            mesh.keep = ((owner == 2) * 255).astype(np.uint8)
+        if mesh is not None and name in ("arm", "arm_far") and "larm" in bind:
+            mesh.keep = ((owner == 2) & (_along((h, w), *bind["larm"]) > HAND_CUT)).astype(np.uint8) * 255
         if mesh is not None:
             meshes.append(mesh)
     return Rig(meshes, bind, (w, h))

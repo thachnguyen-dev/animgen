@@ -106,9 +106,11 @@ for char in chars:
                 frames = rig.render_sequence(targets, loop=tpl.animation != "attack", open_hands=hands)
                 if anim in FINISH:
                     swings = rig.swings(targets, loop=tpl.animation != "attack")
-                    fin = [finish(engine, im, rig.render(t, sw, o, head_only=True), ch.placement.image, ch.skeleton,
-                                  t, s.background, tpl.prompt, seed, tpl.gripping(None))
-                           for im, t, sw, o in zip(frames, targets, swings, hands)]
+                    fin = []
+                    for t, sw, o in zip(targets, swings, hands):
+                        im, keep = rig.render_keep(t, sw, o)
+                        fin.append(finish(engine, im, keep, ch.placement.image, ch.skeleton, t, s.background,
+                                          tpl.prompt, seed, tpl.gripping(None), o))
                     if ch.placement.mirrored:
                         fin = [im.transpose(Image.Transpose.FLIP_LEFT_RIGHT) for im in fin]
                     _, ftiles = strip(fin)

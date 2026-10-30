@@ -124,8 +124,9 @@ def test_open_hand_only_where_the_frame_asks():
     assert far[ys, xs, 0].max() < 230                             # darkened as far
 
 
-def test_head_only_is_the_head_where_it_is_in_the_pose():
-    head = np.array(rig().render(Skeleton(list(SPREAD)), head_only=True))
-    ys, xs = np.nonzero(head[..., 3] > 200)
-    assert len(xs) > 2000 and ys.max() < 395 and abs(xs.mean() - 515) < 15     # the head, grown a little at the neck
-    assert not (head[450:, :, 3] > 0).any()                       # nothing of the body
+def test_keep_mask_is_the_head_and_the_visible_hands():
+    _, keep = open_rig().render_keep(Skeleton(list(SPREAD)), open_hands=("r",))
+    assert keep[300, 515]                                         # the head
+    assert keep[SPREAD[4][1] + 5, SPREAD[4][0] + 15]              # past the near wrist: the hand
+    assert not keep[470, 500] and not keep[805, 420]              # the body, a leg
+    assert not keep[SPREAD[3][1], SPREAD[3][0]]                   # the elbow
