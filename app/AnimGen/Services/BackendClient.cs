@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 
 namespace AnimGen.Services;
@@ -95,7 +96,9 @@ public sealed class BackendClient : IDisposable
         HttpResponseMessage resp;
         try
         {
-            resp = await _http.PostAsJsonAsync(path, body, Json);
+            // A sized body: PostAsJsonAsync streams it chunked, and the backend reads Content-Length only.
+            using var content = new StringContent(JsonSerializer.Serialize(body, Json), Encoding.UTF8, "application/json");
+            resp = await _http.PostAsync(path, content);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {

@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -179,7 +180,7 @@ def test_export_names_with_weapon(session, hero, tmp_path):
     run(lambda task: session.generate(task, "a2", WeaponChoice(w.id, None)))
     t = run(lambda task: session.export(task, str(tmp_path / "out"), 512))
     assert t.state == "completed", t.error
-    names = sorted(p.split("/")[-1] for p in t.result["files"])
+    names = sorted(Path(p).name for p in t.result["files"])
     assert names[0] == "hiep-si_attack-a2_kiem_bac_01.png"
     assert "hiep-si_attack-a2_kiem_bac_sheet.png" in names
 

@@ -71,6 +71,16 @@ def test_store_skins_reuse_points(tmp_path, sword):
     assert store.list()[0].name == "Kiếm"
 
 
+def test_store_replacing_skin_removes_old_image(tmp_path, sword):
+    path, _, _ = sword
+    store = WeaponStore(tmp_path / "w")
+    old = store.add("Kiếm", "one_handed", "bạc", [str(path)]).skins[0].images[0]
+    w = store.add("Kiếm", "one_handed", "bạc", [str(path)])
+    assert len(w.skins) == 1
+    assert not (w.folder / old).exists()
+    assert sorted(p.name for p in w.folder.glob("*.png")) == w.skins[0].images
+
+
 def test_bow_needs_three_images(tmp_path):
     store = WeaponStore(tmp_path / "w")
     p, _, _ = synth.bow_stage(tmp_path / "b1.png", 1)

@@ -22,6 +22,7 @@ public sealed class FrameItem : ObservableObject
 
     public int Index { get; }
     public string Label => $"Khung {Index}";
+    public override string ToString() => Label;
 
     public ImageSource? Image { get => _image; private set => Set(ref _image, value); }
     public ImageSource? Candidate { get => _candidate; private set => Set(ref _candidate, value); }

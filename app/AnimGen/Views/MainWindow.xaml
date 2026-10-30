@@ -207,7 +207,7 @@
                                 </StackPanel>
                             </Button>
                             <StackPanel Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
-                                <ProgressBar Maximum="{Binding ProgressMax}" Value="{Binding ProgressValue}"/>
+                                <ProgressBar Maximum="{Binding ProgressMax, Mode=OneWay}" Value="{Binding ProgressValue, Mode=OneWay}"/>
                                 <TextBlock Text="{Binding ProgressText}" Margin="{StaticResource SpaceGap}"/>
                                 <Button Content="Huỷ" Command="{Binding CancelCommand}" HorizontalAlignment="Left"/>
                             </StackPanel>

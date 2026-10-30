@@ -159,6 +159,7 @@ class WeaponStore:
             folder.mkdir(parents=True, exist_ok=True)
             w = Weapon(wid, name, kind, [], folder)
         sname = skin_name.strip() or f"skin{len(w.skins) + 1}"
+        replaced = [f for s in w.skins if s.name == sname for f in s.images]
         w.skins = [s for s in w.skins if s.name != sname]
         files = []
         for i, img in enumerate(imgs):
@@ -174,6 +175,8 @@ class WeaponStore:
                 break
         w.skins.append(skin)
         self._save(w)
+        for f in replaced:  # the skin's earlier images, now unused
+            (folder / f).unlink(missing_ok=True)
         return w
 
     @staticmethod

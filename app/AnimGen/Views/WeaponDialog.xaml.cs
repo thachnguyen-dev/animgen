@@ -222,7 +222,7 @@ public partial class WeaponDialog : Window
             PreviewImage.Source = FrameItem.Load(r.Path);
             PreviewImage.Visibility = Visibility.Visible;
             ClickArea.Visibility = Visibility.Collapsed;
-            AreaTitle.Text = "Vũ khí trên tay nhân vật — nếu lệch, chọn lại ảnh ở mục B và đặt lại điểm";
+            AreaTitle.Text = "Vũ khí trên tay nhân vật — nếu lệch, bấm “Đặt lại hai điểm” ở mục B";
             SetStatus(StatusKind.Ok, "Nếu vũ khí nằm đúng trong tay, bấm Đóng. Vũ khí sẽ có trong danh sách.");
         }
         catch (BackendException ex)

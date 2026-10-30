@@ -34,6 +34,8 @@ public sealed class AnimationInfo
     public string Weapon { get; set; } = "never";       // never | optional | required
     public List<string> WeaponKinds { get; set; } = new();
     public string? Status { get; set; }
+
+    public override string ToString() => Ready ? NameVi : $"{NameVi} (chưa có)";   // the name screen readers and UI Automation see
 }
 
 public sealed class Figure
@@ -106,6 +108,8 @@ public sealed class SkinInfo
     public List<string> Images { get; set; } = new();
     public List<string> Paths { get; set; } = new();
     public bool Ready { get; set; }
+
+    public override string ToString() => Name;
 }
 
 public sealed class WeaponInfo

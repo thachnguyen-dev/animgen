@@ -213,6 +213,11 @@ def make_handler(app: App):
                 return
             body: dict = {}
             if method == "POST":
+                if "chunked" in self.headers.get("Transfer-Encoding", "").lower():
+                    # Only sized bodies are read; a chunked one would be ignored and break the connection.
+                    self.close_connection = True
+                    self._send(411, {"error": AppError("bad_request", detail="length required").to_json()})
+                    return
                 n = int(self.headers.get("Content-Length") or 0)
                 if n:
                     try:

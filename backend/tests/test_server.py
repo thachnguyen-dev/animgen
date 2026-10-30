@@ -122,6 +122,16 @@ def test_bad_json_and_unknown_route(server):
     assert call(server, "GET", "/nothing")[0] == 404
 
 
+def test_chunked_body_refused(server):
+    # The WPF client once sent chunked JSON, which was read as an empty body ("missing path").
+    req = urllib.request.Request(server + "/character", data=iter([b'{"path": "x.png"}']), method="POST")
+    req.add_header("X-AnimGen-Token", TOKEN)
+    req.add_header("Transfer-Encoding", "chunked")
+    with pytest.raises(urllib.error.HTTPError) as e:
+        urllib.request.urlopen(req, timeout=10)
+    assert e.value.code == 411
+
+
 def test_input_error_over_http(server, tmp_path):
     p = synth.checkerboard_character(tmp_path / "cb.png")
     st, err = call(server, "POST", "/character", {"path": str(p)})
