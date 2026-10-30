@@ -31,7 +31,7 @@ public sealed class AnimationInfo
     public string? Variant { get; set; }
     public string NameVi { get; set; } = "";
     public bool Ready { get; set; }
-    public string Weapon { get; set; } = "never";       // never | optional | required
+    public string Grip { get; set; } = "never";         // never | optional | always: hands closed for a weapon
     public List<string> WeaponKinds { get; set; } = new();
     public string? Status { get; set; }
 
@@ -81,7 +81,6 @@ public sealed class FrameState
     public string Status { get; set; } = "empty";          // empty | ok | failed
     public int Attempts { get; set; }
     public ErrorInfo? Error { get; set; }
-    public bool WeaponClipped { get; set; }
     public string? Preview { get; set; }
     public string CandidateStatus { get; set; } = "none";  // none | ok | failed
     public string? CandidatePreview { get; set; }
@@ -92,13 +91,7 @@ public sealed class AnimationRef
     public string Id { get; set; } = "";
     public string NameVi { get; set; } = "";
     public string? Status { get; set; }
-    public string Weapon { get; set; } = "never";
-}
-
-public sealed class WeaponRef
-{
-    public string WeaponId { get; set; } = "";
-    public string? Skin { get; set; }
+    public string Grip { get; set; } = "never";
 }
 
 public sealed class SessionState
@@ -108,41 +101,10 @@ public sealed class SessionState
     public bool ModelsLoaded { get; set; }
     public CharacterInfo? Character { get; set; }
     public AnimationRef? Animation { get; set; }
-    public WeaponRef? Weapon { get; set; }
+    public bool Grip { get; set; }
     public List<FrameState> Frames { get; set; } = new();
     public bool Complete { get; set; }
     public List<int> ExportHeights { get; set; } = new();
-}
-
-public sealed class SkinInfo
-{
-    public string Name { get; set; } = "";
-    public List<string> Images { get; set; } = new();
-    public List<string> Paths { get; set; } = new();
-    public bool Ready { get; set; }
-
-    public override string ToString() => Name;
-}
-
-public sealed class WeaponInfo
-{
-    public string Id { get; set; } = "";
-    public string Name { get; set; } = "";
-    public string Kind { get; set; } = "";
-    public List<SkinInfo> Skins { get; set; } = new();
-
-    [JsonIgnore]
-    public string KindVi => Kind switch
-    {
-        "one_handed" => "Một tay",
-        "two_handed" => "Hai tay",
-        "polearm" => "Cán dài",
-        "bow" => "Cung",
-        "staff" => "Gậy phép",
-        _ => Kind,
-    };
-
-    public override string ToString() => $"{Name} ({KindVi})";
 }
 
 public sealed class TaskInfo
@@ -168,9 +130,4 @@ public sealed class TaskInfo
 public sealed class TaskReply
 {
     public TaskInfo? Task { get; set; }
-}
-
-public sealed class PathReply
-{
-    public string Path { get; set; } = "";
 }

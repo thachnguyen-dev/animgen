@@ -46,5 +46,5 @@ FIGURE_BOX_MARGIN = 0.15         # detached regions farther than this share of t
 # Canvas fit (§6.5 step 5): grounded frames are moved so the feet stand on the foot line, if the drift is small.
 MAX_FOOT_SNAP_FRACTION = 0.06    # of the character height
 
-# Weapon placement (§7). The hand point is the wrist pushed this far along the forearm direction.
+# Hand anchors for weapons attached later in the game. The hand point is the wrist pushed this far along the forearm.
 HAND_FROM_WRIST = 0.30           # fraction of the forearm length

@@ -28,7 +28,7 @@ def scaled_rest(h=600.0, foot=900.0, cx=500.0, stretch_legs=1.0):
 def test_ready_templates_parse(tid):
     t = load_template(tid)
     assert len(t.frames) == config.FRAME_COUNT == 8
-    if t.weapon != "never":
+    if t.grip != "never":
         assert all(f.weapon is not None for f in t.frames)
 
 
@@ -37,14 +37,31 @@ def test_bow_uses_three_draw_stages():
     assert {f.weapon.stage for f in t.frames} == {1, 2, 3}
 
 
-def test_unarmed_attacks_never_take_a_weapon():
-    assert load_template("a1a").weapon == "never"
-    assert load_template("a1b").weapon == "never"
-
-
-def test_non_attack_templates_store_weapon_data():
+def test_grip_modes():
+    assert load_template("a1a").grip == load_template("a1b").grip == "never"    # unarmed
     for tid in ("idle", "walk", "run"):
-        assert load_template(tid).weapon == "optional"
+        assert load_template(tid).grip == "optional"
+    for tid in ("a2", "a5", "a6", "a7"):
+        assert load_template(tid).grip == "always"
+
+
+def test_cast_reaches_forward_with_the_far_hand_only():
+    from animgen.skeleton import LWRI, NECK, RWRI
+    t = load_template("a7")
+    reach = [f.skeleton.points[LWRI][0] - f.skeleton.points[NECK][0] for f in t.frames]
+    assert max(reach) > 0.25 and reach[0] < 0.1 and reach[-1] < 0.1
+    near = [f.skeleton.points[RWRI][0] - f.skeleton.points[NECK][0] for f in t.frames]
+    assert max(near) - min(near) < 0.05                       # the weapon arm stays as in Idle
+    assert {f.weapon.hand for f in t.frames} == {"r"}
+
+
+def test_punch_comes_from_behind_and_down_from_above():
+    from animgen.skeleton import NECK, RWRI
+    t = load_template("a1a")
+    x = [f.skeleton.points[RWRI][0] - f.skeleton.points[NECK][0] for f in t.frames]
+    y = [f.skeleton.points[RWRI][1] - f.skeleton.points[NECK][1] for f in t.frames]
+    assert x[2] < 0 < x[5]                                    # loaded behind, strikes in front
+    assert y[3] < y[4] < y[5] and y[3] < 0                    # over the top, then down
 
 
 def test_stored_templates_match_authoring_source():

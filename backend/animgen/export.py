@@ -2,9 +2,9 @@
 
 Sheet layout (Proposed, cut C8): one row, 8 frames in play order, no padding, each cell exactly the frame size.
 Unity: Sprite Mode Multiple, Sprite Editor > Slice > Grid By Cell Count, 1 row x 8 columns.
-File names (Proposed, §10.3): ``<character>_<animation>[_<weapon>_<skin>]_<01-08>.png`` and ``..._sheet.png``.
-Armed animations also get ``..._weapon.json``: where the weapon hand is in every frame, so a weapon can be attached
-in the game instead of (or as well as) being drawn in (owner's note, 2026-10-30).
+File names (Proposed, §10.3): ``<character>_<animation>_<01-08>.png`` and ``..._sheet.png``.
+Animations drawn with gripping hands also get ``..._weapon.json``: where the weapon hand is in every frame, so the
+owner attaches the weapon in the game (the app draws characters without weapons, owner 2026-10-30).
 Files are written to a hidden folder first, checked, then moved into place, so a failed export never leaves a
 mix of old and new files that looks complete.
 """
@@ -12,7 +12,9 @@ mix of old and new files that looks complete.
 from __future__ import annotations
 
 import json
+import re
 import shutil
+import unicodedata
 import uuid
 from pathlib import Path
 
@@ -22,14 +24,18 @@ from . import config
 from .errors import AppError
 from .frames import validate_file
 from .imaging import premultiplied_resize
-from .weapons import slug
 
 
-def base_name(character: str, animation: str, weapon: str | None = None, skin: str | None = None) -> str:
-    parts = [slug(character), slug(animation)]
-    if weapon:
-        parts += [slug(weapon), slug(skin or "default")]
-    return "_".join(parts)
+def slug(text: str) -> str:
+    """ASCII file-name part: diacritics removed (Vietnamese đ handled), spaces to '-', other characters dropped."""
+    t = text.replace("đ", "d").replace("Đ", "D")
+    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode("ascii")
+    t = re.sub(r"[^A-Za-z0-9_-]+", "-", t).strip("-").lower()
+    return t or "x"
+
+
+def base_name(character: str, animation: str) -> str:
+    return f"{slug(character)}_{slug(animation)}"
 
 
 def sprite_sheet(frames: list[Image.Image]) -> Image.Image:

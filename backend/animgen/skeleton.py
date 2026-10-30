@@ -249,3 +249,15 @@ def draw_openpose(skel: Skeleton, size: tuple[int, int], canvas: np.ndarray | No
             continue
         cv2.circle(img, (int(p[0]), int(p[1])), sw, _COLOURS[i], thickness=-1)
     return img
+
+
+def hand_point(skel: Skeleton, hand: str) -> tuple[float, float] | None:
+    """The middle of the closed hand ('r' near, 'l' far): the wrist pushed a little further along the forearm."""
+    from . import config
+    elb, wri = (skel.points[RELB], skel.points[RWRI]) if hand == "r" else (skel.points[LELB], skel.points[LWRI])
+    if wri is None:
+        return None
+    if elb is None:
+        return wri
+    k = config.HAND_FROM_WRIST
+    return (wri[0] + (wri[0] - elb[0]) * k, wri[1] + (wri[1] - elb[1]) * k)

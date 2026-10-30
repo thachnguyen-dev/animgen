@@ -9,17 +9,12 @@
 
 Routes (all JSON):
   GET  /health                         -> {ok, engine, demo, version}
-  GET  /animations                     -> [{id, name_vi, ready, weapon, weapon_kinds, status}]
+  GET  /animations                     -> [{id, name_vi, ready, grip, weapon_kinds, status}]
   GET  /state                          -> session state (frames, previews, candidates, ...)
   POST /character {path, facing?, name?}
-  GET  /weapons                        POST /weapons {name, kind, skin, images:[...]}
-  POST /weapons/points {weapon_id, skin?, stage, grip:[x,y], tip:[x,y]}
-  POST /weapons/preview {weapon_id, skin?, stage?} -> {path}
-  POST /weapons/delete {weapon_id}
-  POST /generate {animation, weapon?:{weapon_id, skin?}, seed?} -> {task}
+  POST /generate {animation, grip?: bool, seed?} -> {task}   (grip: hands closed, where the animation leaves it open)
   POST /regenerate {frame?: 1..8}      -> {task}
   POST /accept {frame}   POST /keep {frame}   POST /accept_all
-  POST /weapon {weapon?:{weapon_id, skin?}}  (recombine with another weapon or skin)
   POST /export {folder, height}        -> {task}
   GET  /tasks/<id>       POST /tasks/<id>/cancel
   POST /settings {auto_retries}
@@ -42,7 +37,7 @@ from typing import Any
 
 from . import __version__, config
 from .errors import AppError
-from .session import Session, WeaponChoice
+from .session import Session
 from .tasks import TaskRunner
 from .templates import available
 
@@ -88,14 +83,11 @@ class App:
                 return 200, available()
             if parts == ["state"]:
                 return 200, s.state()
-            if parts == ["weapons"]:
-                return 200, [w.to_json() for w in s.weapons.list()]
             if len(parts) == 2 and parts[0] == "tasks":
                 t = self.runner.get(parts[1])
                 return (404, {"error": {"code": "not_found", "message": "task"}}) if t is None else (200, t.to_json())
         if method == "POST":
-            busy_guard = parts[:1] in (["character"], ["accept"], ["keep"], ["accept_all"], ["weapon"],
-                                       ["weapons"], ["settings"])
+            busy_guard = parts[:1] in (["character"], ["accept"], ["keep"], ["accept_all"], ["settings"])
             if busy_guard and self.runner.busy():
                 raise AppError("busy")
             if parts == ["character"]:
@@ -104,26 +96,14 @@ class App:
             if parts == ["character", "skeleton"]:
                 ch = s.confirm_skeleton(_req(body, "points", list))
                 return 200, {"character": ch.to_json(), "state": s.state()}
-            if parts == ["weapons"]:
-                w = s.weapons.add(_req(body, "name", str), _req(body, "kind", str), str(body.get("skin", "")),
-                                  list(_req(body, "images", list)))
-                return 200, w.to_json()
-            if parts == ["weapons", "points"]:
-                w = s.weapons.set_points(_req(body, "weapon_id", str), body.get("skin"), int(body.get("stage", 1)),
-                                         _xy(body.get("grip")), _xy(body.get("tip")))
-                return 200, w.to_json()
-            if parts == ["weapons", "preview"]:
-                p = s.weapon_preview(_req(body, "weapon_id", str), body.get("skin"), int(body.get("stage", 1)))
-                return 200, {"path": str(p)}
-            if parts == ["weapons", "delete"]:
-                s.weapons.remove(_req(body, "weapon_id", str))
-                return 200, {"ok": True}
             if parts == ["generate"]:
                 anim = _req(body, "animation", str)
-                weapon = _weapon(body.get("weapon"))
+                grip = body.get("grip")
+                if grip is not None and not isinstance(grip, bool):
+                    raise AppError("bad_request", detail="grip must be true or false")
                 seed = body.get("seed")
-                s.prepare(anim, weapon)  # fail fast on a bad choice, before a task starts
-                t = self.runner.start("generate", lambda task: s.generate(task, anim, weapon,
+                s.prepare(anim)  # fail fast on a bad choice, before a task starts
+                t = self.runner.start("generate", lambda task: s.generate(task, anim, grip,
                                                                           int(seed) if seed is not None else None))
                 return 200, {"task": t.to_json()}
             if parts == ["regenerate"]:
@@ -141,9 +121,6 @@ class App:
                 return 200, s.keep(int(_req(body, "frame", int)))
             if parts == ["accept_all"]:
                 return 200, s.accept_all()
-            if parts == ["weapon"]:
-                s.set_weapon(_weapon(body.get("weapon")))
-                return 200, s.state()
             if parts == ["export"]:
                 folder = _req(body, "folder", str)
                 height = int(_req(body, "height", int))
@@ -177,20 +154,6 @@ def _req(body: dict, key: str, typ: type) -> Any:
     if not isinstance(v, typ):
         raise AppError("bad_request", detail=f"{key} has the wrong type")
     return v
-
-
-def _xy(v: Any) -> tuple[float, float]:
-    if not isinstance(v, (list, tuple)) or len(v) != 2:
-        raise AppError("bad_request", detail="point must be [x, y]")
-    return float(v[0]), float(v[1])
-
-
-def _weapon(v: Any) -> WeaponChoice | None:
-    if v is None:
-        return None
-    if not isinstance(v, dict) or not v.get("weapon_id"):
-        raise AppError("bad_request", detail="weapon")
-    return WeaponChoice(str(v["weapon_id"]), v.get("skin"))
 
 
 def make_handler(app: App):

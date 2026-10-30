@@ -7,7 +7,6 @@ from PIL import Image
 
 import synth
 from animgen.errors import AppError
-from animgen.session import WeaponChoice
 from animgen.tasks import TaskRunner
 
 
@@ -15,13 +14,6 @@ def run(fn, timeout=120):
     r = TaskRunner()
     t = r.start("t", fn)
     return r.wait(t.id, timeout)
-
-
-def add_sword(session, tmp_path, name="Kiếm", skin="bạc", colour=(200, 200, 215)):
-    p, g, t = synth.sword(tmp_path / f"{skin}.png", colour)
-    w = session.weapons.add(name, "one_handed", skin, [str(p)])
-    session.weapons.set_points(w.id, skin, 1, g, t)
-    return w
 
 
 def test_unarmed_generation_all_frames_ok(session, hero):
@@ -115,50 +107,29 @@ def test_cancel_between_frames(session, hero):
     assert t.state == "cancelled"
 
 
-def test_weapon_rules(session, hero, tmp_path):
+def test_grip_rules(session, hero):
     session.set_character(str(hero))
-    w = add_sword(session, tmp_path)
-    assert session.prepare("a2", None).id == "a2"       # weapons are optional: they can be attached in the game
+    seen = []
+    draw = session.engine.drawer.draw
+    session.engine.drawer.draw = lambda req: seen.append(req.hands_gripping) or draw(req)
     with pytest.raises(AppError) as e:
-        session.prepare("a1a", WeaponChoice(w.id, None))
-    assert e.value.code == "weapon_not_allowed"
-    with pytest.raises(AppError) as e:
-        session.prepare("a5", WeaponChoice(w.id, None))
-    assert e.value.code == "weapon_wrong_kind"
-    with pytest.raises(AppError) as e:
-        session.prepare("jump", None)
+        session.prepare("jump")
     assert e.value.code == "animation_not_ready"
-    session.prepare("walk", WeaponChoice(w.id, None))  # optional weapon on a non-attack animation
+    for anim, asked, gripping in (("a1a", True, False),   # unarmed: never
+                                  ("a2", False, True),    # made for a weapon: always
+                                  ("a7", None, True),
+                                  ("walk", None, False),  # the owner's choice
+                                  ("walk", True, True)):
+        seen.clear()
+        run(lambda task: session.generate(task, anim, asked, only=[0]))
+        assert session.grip is gripping and seen == [gripping], anim
 
 
-def test_skin_change_is_recombine_only(session, hero, tmp_path):
+def test_four_frame_test_run_draws_every_other_frame(session, hero):
     session.set_character(str(hero))
-    w = add_sword(session, tmp_path, skin="bạc")
-    add_sword(session, tmp_path, skin="đỏ", colour=(200, 30, 30))
-    run(lambda task: session.generate(task, "a2", WeaponChoice(w.id, "bạc")))
-    bases = [s.base for s in session.slots]
-    calls = len(session.engine.drawer._attempts)
-    t0 = time.time()
-    session.set_weapon(WeaponChoice(w.id, "đỏ"))
-    assert time.time() - t0 < 10
-    assert [s.base for s in session.slots] == bases           # the same character frames
-    assert len(session.engine.drawer._attempts) == calls       # no drawing
-    a = np.asarray(Image.open(session.slots[4].preview))
-    assert ((a[..., 0] > 180) & (a[..., 1] < 60) & (a[..., 3] > 200)).sum() > 50  # red blade present
-
-
-def test_bow_stages_change_image(session, hero, tmp_path):
-    session.set_character(str(hero))
-    imgs = []
-    for st in (1, 2, 3):
-        p, g, t = synth.bow_stage(tmp_path / f"b{st}.png", st)
-        imgs.append((p, g, t))
-    w = session.weapons.add("Cung", "bow", "gỗ", [str(p) for p, _, _ in imgs])
-    for st, (_, g, t) in enumerate(imgs, start=1):
-        session.weapons.set_points(w.id, "gỗ", st, g, t)
-    tk = run(lambda task: session.generate(task, "a5", WeaponChoice(w.id, None)))
-    assert tk.state == "completed", tk.error
-    assert all(f["status"] == "ok" for f in session.state()["frames"])
+    run(lambda task: session.generate(task, "idle", None, only=[0, 2, 4, 6]))
+    st = session.state()
+    assert [f["status"] for f in st["frames"]] == ["ok", "empty"] * 4 and not st["complete"]
 
 
 def test_left_facing_character_keeps_its_facing(session, tmp_path):
@@ -172,20 +143,19 @@ def test_left_facing_character_keeps_its_facing(session, tmp_path):
     assert (512 - xs.min()) > (xs.max() - 512)
 
 
-def test_export_names_with_weapon(session, hero, tmp_path):
+def test_export_names(session, hero, tmp_path):
     session.set_character(str(hero), name="Hiệp sĩ")
-    w = add_sword(session, tmp_path)
-    run(lambda task: session.generate(task, "a2", WeaponChoice(w.id, None)))
+    run(lambda task: session.generate(task, "a2", None))
     t = run(lambda task: session.export(task, str(tmp_path / "out"), 512))
     assert t.state == "completed", t.error
     names = sorted(Path(p).name for p in t.result["files"])
-    assert names[0] == "hiep-si_attack-a2_kiem_bac_01.png"
-    assert "hiep-si_attack-a2_kiem_bac_sheet.png" in names
+    assert names[0] == "hiep-si_attack-a2_01.png"
+    assert "hiep-si_attack-a2_sheet.png" in names and "hiep-si_attack-a2_weapon.json" in names
 
 
-def test_armed_attack_without_weapon_grips_and_exports_hand_anchors(session, tmp_path):
+def test_weapon_attack_grips_and_exports_hand_anchors(session, tmp_path):
     import json
-    from animgen.weapons import hand_point
+    from animgen.skeleton import hand_point
     left = synth.character(tmp_path / "left.png", facing="left")
     session.set_character(str(left), "left", name="Cung thủ")
     seen = []
@@ -198,23 +168,34 @@ def test_armed_attack_without_weapon_grips_and_exports_hand_anchors(session, tmp
     js = [p for p in t.result["files"] if p.endswith("_weapon.json")]
     assert len(js) == 1
     data = json.load(open(js[0], encoding="utf-8"))
-    assert data["frame_size"] == [256, 256] and len(data["frames"]) == 8
+    assert data["frame_size"] == [256, 256] and len(data["frames"]) == 8 and data["animation"] == "a5"
     canvas = session.character.placement.image.width
     k = 256 / canvas
     tpl = session.template
     for f, tf, slot in zip(data["frames"], tpl.frames, session.slots):
-        assert f["weapon"]
+        assert f["weapon"] and f["hand"] == "far"          # the bow is held by the far arm
         hx, hy = hand_point(slot.skeleton, tf.weapon.hand)
         assert f["x"] == pytest.approx((canvas - 1 - hx) * k, abs=0.02)   # mirrored back: the character faces left
         assert f["y"] == pytest.approx(hy * k, abs=0.02)
         assert f["angle"] == pytest.approx((180.0 - tf.weapon.angle + 180.0) % 360.0 - 180.0, abs=0.02)
 
 
-def test_no_hand_anchors_for_unarmed_animations(session, hero, tmp_path):
+@pytest.mark.parametrize("anim", ["a1a", "idle"])
+def test_no_hand_anchors_without_gripping_hands(session, hero, tmp_path, anim):
     session.set_character(str(hero))
-    run(lambda task: session.generate(task, "a1a", None))
+    run(lambda task: session.generate(task, anim, None))
     t = run(lambda task: session.export(task, str(tmp_path / "out"), 128))
     assert not any(p.endswith(".json") for p in t.result["files"])
+
+
+def test_cast_keeps_the_weapon_in_the_near_hand(session, hero, tmp_path):
+    import json
+    session.set_character(str(hero))
+    run(lambda task: session.generate(task, "a7", None))
+    t = run(lambda task: session.export(task, str(tmp_path / "out"), 128))
+    js = [p for p in t.result["files"] if p.endswith("_weapon.json")]
+    data = json.load(open(js[0], encoding="utf-8"))
+    assert {f["hand"] for f in data["frames"]} == {"near"}
 
 
 def test_temp_folder_cleanup(tmp_path):
@@ -236,10 +217,10 @@ def test_skeleton_must_be_confirmed_when_required(tmp_path, hero):
     ch = s.set_character(str(hero))
     assert ch.to_json()["skeleton"]["confirmed"] is False
     with pytest.raises(AppError) as e:
-        s.prepare("idle", None)
+        s.prepare("idle")
     assert e.value.code == "skeleton_unconfirmed"
     s.confirm_skeleton(ch.view_points())
-    assert s.prepare("idle", None).id == "idle"
+    assert s.prepare("idle").id == "idle"
     s.close()
 
 

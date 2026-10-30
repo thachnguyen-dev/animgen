@@ -5,18 +5,20 @@ File format (``template_data/<id>.json``)::
     {
       "id": "a2", "animation": "attack", "variant": "a2",
       "name_vi": "...", "status": "Proposed",
-      "weapon": "never" | "optional" | "required",
-      "weapon_kinds": ["one_handed", ...],          # which weapon kinds fit (required/optional only)
+      "grip": "never" | "optional" | "always",     # hands closed around a weapon attached later in the game
+      "weapon_kinds": ["one_handed", ...],          # which weapon kinds the motion is made for
       "prompt": "walking",                          # extra description for the image model
       "rest": [18 points],                          # the standing pose the template was authored on
       "frames": [                                   # exactly 8
         {"points": [18 points], "contact": "ground" | "air",
-         "weapon": {"hand": "r" | "l", "angle": 0.0, "layer": "front" | "behind", "stage": 1}}
+         "weapon": {"hand": "r" | "l", "angle": 0.0, "layer": "front" | "behind", "stage": 1}}   # grip != never
       ]
     }
 
 Template units: height of the rest pose is about 1.0, the ground anchor is (0, 0), y points down.
 Weapon angle: degrees in image space (x right, y down), 0 = pointing right, 90 = pointing down.
+The app draws characters only (owner, 2026-10-30): the frame "weapon" data is not drawn, it is exported as the hand
+anchors for attaching a weapon in the game. Hand "r" is the near arm, "l" the far arm (the template faces right).
 """
 
 from __future__ import annotations
@@ -49,6 +51,7 @@ ANIMATIONS = [
     ("a4", "attack", "a4", "Vũ khí cán dài", False),
     ("a5", "attack", "a5", "Cung", True),
     ("a6", "attack", "a6", "Gậy phép", True),
+    ("a7", "attack", "a7", "Tay trái tung chiêu", True),
 ]
 
 
@@ -77,20 +80,17 @@ class MotionTemplate:
     variant: str | None
     name_vi: str
     status: str
-    weapon: str
+    grip: str
     weapon_kinds: list[str]
     prompt: str
     rest: Skeleton
     frames: list[TemplateFrame]
 
-    @property
-    def armed_attack(self) -> bool:
-        """An attack made for a weapon (sword, bow, staff): the hands grip even when no weapon is drawn in."""
-        return self.animation == "attack" and bool(self.weapon_kinds)
-
-    @property
-    def armed_capable(self) -> bool:
-        return self.weapon in ("optional", "required")
+    def gripping(self, asked: bool | None) -> bool:
+        """Whether the hands are drawn closed around a weapon: fixed by the template, or the owner's choice."""
+        if self.grip == "never":
+            return False
+        return self.grip == "always" or bool(asked)
 
 
 class TemplateError(ValueError):
@@ -115,9 +115,9 @@ def parse_template(data: dict) -> MotionTemplate:
     frames_raw = data.get("frames")
     if not isinstance(frames_raw, list) or len(frames_raw) != config.FRAME_COUNT:
         raise TemplateError(f"{tid}: a template has exactly {config.FRAME_COUNT} frames")
-    weapon = data.get("weapon", "never")
-    if weapon not in ("never", "optional", "required"):
-        raise TemplateError(f"{tid}: weapon must be never/optional/required")
+    grip = data.get("grip", "never")
+    if grip not in ("never", "optional", "always"):
+        raise TemplateError(f"{tid}: grip must be never/optional/always")
     kinds = list(data.get("weapon_kinds", []))
     for k in kinds:
         if k not in WEAPON_KINDS:
@@ -130,9 +130,9 @@ def parse_template(data: dict) -> MotionTemplate:
             raise TemplateError(f"{tid} frame {i + 1}: contact is ground or air")
         wp = None
         w = fr.get("weapon")
-        if weapon != "never":
+        if grip != "never":
             if not isinstance(w, dict):
-                raise TemplateError(f"{tid} frame {i + 1}: weapon data is required for armed templates")
+                raise TemplateError(f"{tid} frame {i + 1}: weapon data is required when the hands can grip")
             hand, layer, stage = w.get("hand"), w.get("layer"), int(w.get("stage", 1))
             if hand not in ("r", "l") or layer not in ("front", "behind") or stage not in (1, 2, 3):
                 raise TemplateError(f"{tid} frame {i + 1}: bad weapon data")
@@ -141,7 +141,7 @@ def parse_template(data: dict) -> MotionTemplate:
     return MotionTemplate(
         id=tid, animation=str(data.get("animation", tid)), variant=data.get("variant"),
         name_vi=str(data.get("name_vi", tid)), status=str(data.get("status", "Proposed")),
-        weapon=weapon, weapon_kinds=kinds, prompt=str(data.get("prompt", "")),
+        grip=grip, weapon_kinds=kinds, prompt=str(data.get("prompt", "")),
         rest=_parse_points(data.get("rest"), f"{tid} rest"), frames=frames)
 
 
@@ -157,9 +157,9 @@ def available(directory: Path = TEMPLATE_DIR) -> list[dict]:
     for tid, anim, variant, name, in_v1 in ANIMATIONS:
         path = directory / f"{tid}.json"
         entry = {"id": tid, "animation": anim, "variant": variant, "name_vi": name,
-                 "ready": bool(in_v1 and path.is_file()), "weapon": "never", "weapon_kinds": [], "status": None}
+                 "ready": bool(in_v1 and path.is_file()), "grip": "never", "weapon_kinds": [], "status": None}
         if path.is_file():
             t = load_template(tid, directory)
-            entry.update(weapon=t.weapon, weapon_kinds=t.weapon_kinds, status=t.status)
+            entry.update(grip=t.grip, weapon_kinds=t.weapon_kinds, status=t.status)
         out.append(entry)
     return out

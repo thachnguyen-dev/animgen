@@ -12,22 +12,14 @@ namespace AnimGen.ViewModels;
 /// <summary>Kinds of status line. Each one has its own icon and wording, not only its own colour (§11.1).</summary>
 public enum StatusKind { Info, Busy, Ok, Warning, Error }
 
-public sealed class WeaponOption
-{
-    public WeaponInfo? Weapon { get; init; }
-    public string Label => Weapon == null ? "Không dùng vũ khí" : Weapon.ToString();
-    public override string ToString() => Label;
-}
-
 /// <summary>
-/// The whole workflow of §11.2: choose the character, choose the animation (and variant, weapon, skin),
+/// The whole workflow of §11.2: choose the character, choose the animation (and whether the hands grip),
 /// generate, watch progress, preview, regenerate a frame or all and compare, export.
 /// </summary>
 public sealed class MainViewModel : ObservableObject
 {
     private BackendClient? _api;
     private readonly DispatcherTimer _player;
-    private bool _suppressWeaponChange;
     private string? _taskId;
 
     public MainViewModel()
@@ -65,8 +57,6 @@ public sealed class MainViewModel : ObservableObject
     // Bindable state
     // ---------------------------------------------------------------------------------------------------------
     public ObservableCollection<AnimationInfo> Animations { get; } = new();
-    public ObservableCollection<WeaponOption> WeaponOptions { get; } = new();
-    public ObservableCollection<SkinInfo> Skins { get; } = new();
     public ObservableCollection<FrameItem> Frames { get; } = new();
     public IReadOnlyList<int> FpsChoices { get; } = new[] { 6, 8, 12, 24 };          // cut C7
     public ObservableCollection<int> ExportHeights { get; } = new() { 128, 256, 512 };
@@ -124,53 +114,28 @@ public sealed class MainViewModel : ObservableObject
         {
             if (Set(ref _selectedAnimation, value))
             {
-                RebuildWeaponOptions();
-                Raise(nameof(ShowWeapon));
+                Raise(nameof(ShowGrip));
                 Raise(nameof(CanGenerate));
                 Raise(nameof(AnimationNote));
             }
         }
     }
 
-    public bool ShowWeapon => SelectedAnimation is { Weapon: "optional" or "required" };
+    /// <summary>The app draws characters only; weapons are attached in the game (owner, 2026-10-30). Where the
+    /// animation leaves it open, the owner chooses whether the hands are drawn closed around a weapon.</summary>
+    public bool ShowGrip => SelectedAnimation is { Ready: true, Grip: "optional" };
+
+    private bool _grip;
+    public bool Grip { get => _grip; set => Set(ref _grip, value); }
 
     public string AnimationNote => SelectedAnimation switch
     {
         null => "",
         { Ready: false } => "Hoạt ảnh này chưa có trong phiên bản này.",
-        { Weapon: "required" } => "Cần chọn vũ khí phù hợp.",
-        { Weapon: "optional" } => "Vũ khí là tuỳ chọn. Khi xuất có kèm tệp vị trí tay cầm (…_weapon.json) để gắn vũ khí trong game.",
-        _ => "Không dùng vũ khí.",
+        { Grip: "always" } => "Tay nắm như đang cầm vũ khí. Khi xuất có kèm tệp vị trí tay (…_weapon.json) để gắn vũ khí trong game.",
+        { Grip: "optional" } => "Nếu chọn tay nắm, khi xuất có kèm tệp vị trí tay (…_weapon.json) để gắn vũ khí trong game.",
+        _ => "Tay không, không có vị trí gắn vũ khí.",
     };
-
-    private WeaponOption? _selectedWeapon;
-    public WeaponOption? SelectedWeapon
-    {
-        get => _selectedWeapon;
-        set
-        {
-            if (Set(ref _selectedWeapon, value))
-            {
-                RebuildSkins();
-                Raise(nameof(CanGenerate));
-                _ = RecombineIfNeededAsync();
-            }
-        }
-    }
-
-    private SkinInfo? _selectedSkin;
-    public SkinInfo? SelectedSkin
-    {
-        get => _selectedSkin;
-        set
-        {
-            if (Set(ref _selectedSkin, value))
-            {
-                Raise(nameof(CanGenerate));
-                _ = RecombineIfNeededAsync();
-            }
-        }
-    }
 
     private FrameItem? _selectedFrame;
     public FrameItem? SelectedFrame
@@ -221,9 +186,7 @@ public sealed class MainViewModel : ObservableObject
 
     public bool CanGenerate =>
         Ready && !IsBusy && _characterPath != null && _skeleton is { Confirmed: true } && SelectedAnimation is { Ready: true }
-        && (SelectedAnimation.Weapon != "required"
-            || (SelectedWeapon?.Weapon != null && SelectedSkin is { Ready: true }))
-        && (SelectedWeapon?.Weapon == null || SelectedSkin is { Ready: true });
+;
 
     public ICommand ChooseCharacterCommand { get; }
     public ICommand FlipFacingCommand { get; }
@@ -252,7 +215,6 @@ public sealed class MainViewModel : ObservableObject
         IsDemo = h.Demo;
         Animations.Clear();
         foreach (AnimationInfo a in await api.AnimationsAsync()) Animations.Add(a);
-        await ReloadWeaponsAsync();
         SelectedAnimation = Animations.FirstOrDefault(a => a.Ready);
         Fps = 8;
         Ready = true;
@@ -266,58 +228,6 @@ public sealed class MainViewModel : ObservableObject
     {
         Ready = false;
         SetStatus(StatusKind.Error, message);
-    }
-
-    public async Task ReloadWeaponsAsync(string? selectWeaponId = null)
-    {
-        if (_api == null) return;
-        _weapons = await _api.WeaponsAsync();
-        RebuildWeaponOptions(selectWeaponId);
-    }
-
-    private List<WeaponInfo> _weapons = new();
-
-    private void RebuildWeaponOptions(string? selectId = null)
-    {
-        _suppressWeaponChange = true;
-        try
-        {
-            string? keep = selectId ?? SelectedWeapon?.Weapon?.Id;
-            WeaponOptions.Clear();
-            AnimationInfo? a = SelectedAnimation;
-            if (a == null || a.Weapon == "never")
-            {
-                SelectedWeapon = null;
-                return;
-            }
-            if (a.Weapon == "optional") WeaponOptions.Add(new WeaponOption());
-            foreach (WeaponInfo w in _weapons.Where(w => a.WeaponKinds.Contains(w.Kind)))
-                WeaponOptions.Add(new WeaponOption { Weapon = w });
-            SelectedWeapon = WeaponOptions.FirstOrDefault(o => o.Weapon?.Id == keep) ?? WeaponOptions.FirstOrDefault();
-            RebuildSkins();
-        }
-        finally
-        {
-            _suppressWeaponChange = false;
-        }
-    }
-
-    private void RebuildSkins()
-    {
-        bool outer = _suppressWeaponChange;
-        _suppressWeaponChange = true;
-        try
-        {
-            string? keep = SelectedSkin?.Name;
-            Skins.Clear();
-            if (SelectedWeapon?.Weapon != null)
-                foreach (SkinInfo s in SelectedWeapon.Weapon.Skins) Skins.Add(s);
-            SelectedSkin = Skins.FirstOrDefault(s => s.Name == keep) ?? Skins.FirstOrDefault();
-        }
-        finally
-        {
-            _suppressWeaponChange = outer;
-        }
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -394,14 +304,11 @@ public sealed class MainViewModel : ObservableObject
     // ---------------------------------------------------------------------------------------------------------
     // Generate / regenerate / compare
     // ---------------------------------------------------------------------------------------------------------
-    private WeaponRef? CurrentWeapon() =>
-        SelectedWeapon?.Weapon == null ? null : new WeaponRef { WeaponId = SelectedWeapon.Weapon.Id, Skin = SelectedSkin?.Name };
-
     private async Task GenerateAsync()
     {
         if (_api == null || SelectedAnimation == null) return;
         StopPlay();
-        TaskReply r = await _api.GenerateAsync(SelectedAnimation.Id, CurrentWeapon());
+        TaskReply r = await _api.GenerateAsync(SelectedAnimation.Id, ShowGrip ? Grip : null);
         await RunTaskAsync(r.Task!);
     }
 
@@ -436,25 +343,6 @@ public sealed class MainViewModel : ObservableObject
         if (_api == null || _taskId == null) return;
         await _api.CancelAsync(_taskId);
         ProgressText = "Đang huỷ sau bước hiện tại…";
-    }
-
-    private async Task RecombineIfNeededAsync()
-    {
-        // Changing weapon or skin after generation only recombines the frames (§7): seconds, no AI work.
-        if (_suppressWeaponChange || _api == null || IsBusy || !HasFrames || _lastState?.Animation == null) return;
-        if (SelectedAnimation?.Id != _lastState.Animation.Id) return;
-        WeaponRef? w = CurrentWeapon();
-        if (w != null && SelectedSkin is not { Ready: true }) return;
-        if (_lastState.Animation.Weapon == "required" && w == null) return;
-        try
-        {
-            ApplyState(await _api.SetWeaponAsync(w));
-            SetStatus(StatusKind.Ok, w == null ? "Đã bỏ vũ khí khỏi các khung." : "Đã ghép lại vũ khí vào các khung.");
-        }
-        catch (Exception ex)
-        {
-            OnError(ex);
-        }
     }
 
     private async Task RunTaskAsync(TaskInfo task)
@@ -560,11 +448,7 @@ public sealed class MainViewModel : ObservableObject
             foreach (int h in s.ExportHeights) ExportHeights.Add(h);
         }
         int ok = Frames.Count(f => f.IsOk);
-        var clipped = Frames.Where(f => f.WeaponClipped).Select(f => f.Index).ToList();
-        FramesSummary = s.Animation == null
-            ? ""
-            : $"{s.Animation.NameVi}: {ok} / 8 khung xong."
-              + (clipped.Count > 0 ? $" Vũ khí bị cắt ở mép khung: {string.Join(", ", clipped)}." : "");
+        FramesSummary = s.Animation == null ? "" : $"{s.Animation.NameVi}: {ok} / 8 khung xong.";
         if (!IsPlaying) PreviewImage = SelectedFrame?.Image ?? Frames.FirstOrDefault(f => f.Image != null)?.Image;
         Raise(nameof(ShowCompare));
         CommandManager.InvalidateRequerySuggested();

@@ -13,7 +13,6 @@ public sealed class FrameItem : ObservableObject
     private string _status = "empty";
     private string _candidateStatus = "none";
     private string _errorText = "";
-    private bool _weaponClipped;
     private bool _isSelected;
     private string? _previewPath;
     private string? _candidatePath;
@@ -66,7 +65,6 @@ public sealed class FrameItem : ObservableObject
     };
 
     public string ErrorText { get => _errorText; private set => Set(ref _errorText, value); }
-    public bool WeaponClipped { get => _weaponClipped; private set => Set(ref _weaponClipped, value); }
     public bool IsSelected { get => _isSelected; set => Set(ref _isSelected, value); }
 
     public void Update(FrameState s)
@@ -74,7 +72,6 @@ public sealed class FrameItem : ObservableObject
         Status = s.Status;
         CandidateStatus = s.CandidateStatus;
         ErrorText = s.Error?.Message ?? "";
-        WeaponClipped = s.WeaponClipped;
         if (s.Preview != _previewPath)
         {
             _previewPath = s.Preview;

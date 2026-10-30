@@ -35,7 +35,7 @@ class FrameRequest:
     background: tuple[int, int, int]  # flat background colour to draw on
     prompt: str                       # short motion description from the template
     seed: int
-    hands_gripping: bool              # armed animation: hands closed in a grip, no weapon drawn
+    hands_gripping: bool              # hands closed around a weapon attached later; no weapon is drawn
     extra: dict = field(default_factory=dict)
 
 

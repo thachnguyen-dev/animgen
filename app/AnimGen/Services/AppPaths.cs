@@ -11,7 +11,6 @@ namespace AnimGen.Services;
 /// DATA\python   the bundled Python (uv-managed)
 /// DATA\venv     the virtual environment with PyTorch, Diffusers, ...
 /// DATA\models   the model folders
-/// DATA\weapons  the owner's weapon images and their grip/tip points
 /// DATA\temp     this session's frames (removed on the next start)
 /// DATA\logs     backend log
 ///

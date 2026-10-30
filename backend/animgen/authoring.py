@@ -160,15 +160,18 @@ _STANCE = dict(r_hip=18, r_knee=12, l_hip=-16, l_knee=8)
 
 
 def a1a() -> list[Pose]:
+    """Overhand punch with the near (right) arm (owner, 2026-10-30): the arm swings from behind to the front while
+    the fist comes down from above the head. A negative elbow folds the forearm up, which is how the raised,
+    cocked arm looks in a side view."""
     g = dict(r_sh=45, r_el=105, l_sh=35, l_el=115)   # guard, fists near the chin
     return [
         Pose(spine=6, head=6, **g, **_STANCE),
-        Pose(spine=2, head=6, r_sh=30, r_el=120, l_sh=40, l_el=110, **_STANCE),                    # wind-up
-        Pose(spine=0, head=6, r_sh=20, r_el=130, l_sh=45, l_el=105, dx=-0.01, **_STANCE),         # load
-        Pose(spine=10, head=6, r_sh=70, r_el=50, l_sh=35, l_el=115, dx=0.01, **_STANCE),          # strike
-        Pose(spine=14, head=6, r_sh=90, r_el=2, l_sh=30, l_el=120, dx=0.025, **_STANCE),          # full reach
-        Pose(spine=13, head=6, r_sh=88, r_el=8, l_sh=30, l_el=120, dx=0.022, **_STANCE),          # hold
-        Pose(spine=9, head=6, r_sh=65, r_el=70, l_sh=33, l_el=115, dx=0.01, **_STANCE),           # recovery
+        Pose(spine=0, head=4, r_sh=-40, r_el=-120, l_sh=40, l_el=110, dx=-0.005, **_STANCE),   # draw back, fist up
+        Pose(spine=-4, head=2, r_sh=-70, r_el=-130, l_sh=45, l_el=105, dx=-0.012, **_STANCE),  # load behind the head
+        Pose(spine=4, head=4, r_sh=140, r_el=-20, l_sh=40, l_el=110, **_STANCE),               # over the top
+        Pose(spine=12, head=8, r_sh=100, r_el=-10, l_sh=30, l_el=115, dx=0.015, **_STANCE),    # forward, coming down
+        Pose(spine=16, head=10, r_sh=70, r_el=4, l_sh=20, l_el=120, dx=0.025, **_STANCE),      # down and through
+        Pose(spine=10, head=7, r_sh=55, r_el=70, l_sh=30, l_el=115, dx=0.012, **_STANCE),      # recovery
         Pose(spine=6, head=6, **g, **_STANCE),
     ]
 
@@ -232,23 +235,42 @@ def a6() -> list[Pose]:
     ]
 
 
+def a7() -> list[Pose]:
+    """Skill cast with the far (left) hand (owner, 2026-10-30): the near arm keeps holding the weapon as in Idle while
+    the far arm pulls in, then thrusts forward, open hand, and comes back."""
+    st = dict(r_hip=8, r_knee=6, l_hip=-8, l_knee=6)
+    near = dict(r_sh=6, r_el=12)                       # Idle's weapon arm
+    return [held(p, offset=-35) for p in (
+        Pose(spine=2, head=0, **near, l_sh=-6, l_el=12, **st),
+        Pose(spine=0, head=-2, **near, l_sh=0, l_el=50, dx=-0.005, **st),      # pull the hand in
+        Pose(spine=-3, head=-3, **near, l_sh=20, l_el=110, dx=-0.01, **st),     # gather at the chest
+        Pose(spine=6, head=2, **near, l_sh=70, l_el=30, dx=0.008, **st),        # thrust
+        Pose(spine=9, head=3, r_sh=4, r_el=12, l_sh=88, l_el=2, dx=0.015, **st),   # full reach, the cast
+        Pose(spine=9, head=3, r_sh=4, r_el=12, l_sh=86, l_el=4, dx=0.015, **st),   # hold
+        Pose(spine=5, head=2, **near, l_sh=40, l_el=45, dx=0.006, **st),        # draw back
+        Pose(spine=2, head=0, **near, l_sh=-4, l_el=16, **st),
+    )]
+
+
 TEMPLATES = {
-    "idle": dict(fn=idle, animation="idle", variant=None, name_vi="Đứng yên", weapon="optional",
+    "idle": dict(fn=idle, animation="idle", variant=None, name_vi="Đứng yên", grip="optional",
                  kinds=["one_handed", "two_handed", "polearm", "bow", "staff"], prompt="standing, idle"),
-    "walk": dict(fn=walk, animation="walk", variant=None, name_vi="Đi bộ", weapon="optional",
+    "walk": dict(fn=walk, animation="walk", variant=None, name_vi="Đi bộ", grip="optional",
                  kinds=["one_handed", "two_handed", "polearm", "bow", "staff"], prompt="walking"),
-    "run": dict(fn=run, animation="run", variant=None, name_vi="Chạy", weapon="optional",
+    "run": dict(fn=run, animation="run", variant=None, name_vi="Chạy", grip="optional",
                 kinds=["one_handed", "two_handed", "polearm", "bow", "staff"], prompt="running"),
-    "a1a": dict(fn=a1a, animation="attack", variant="a1a", name_vi="Tay không — đấm", weapon="never", kinds=[],
-                prompt="punching, fighting stance, clenched hands"),
-    "a1b": dict(fn=a1b, animation="attack", variant="a1b", name_vi="Tay không — đá", weapon="never", kinds=[],
+    "a1a": dict(fn=a1a, animation="attack", variant="a1a", name_vi="Tay không — đấm", grip="never", kinds=[],
+                prompt="punching, overhand punch, fighting stance, clenched hands"),
+    "a1b": dict(fn=a1b, animation="attack", variant="a1b", name_vi="Tay không — đá", grip="never", kinds=[],
                 prompt="kicking, fighting stance"),
-    "a2": dict(fn=a2, animation="attack", variant="a2", name_vi="Vũ khí một tay", weapon="optional",
+    "a2": dict(fn=a2, animation="attack", variant="a2", name_vi="Vũ khí một tay", grip="always",
                kinds=["one_handed"], prompt="attacking, swinging arm, clenched hand"),
-    "a5": dict(fn=a5, animation="attack", variant="a5", name_vi="Cung", weapon="optional", kinds=["bow"],
+    "a5": dict(fn=a5, animation="attack", variant="a5", name_vi="Cung", grip="always", kinds=["bow"],
                prompt="archery stance, aiming, arms raised, clenched hands"),
-    "a6": dict(fn=a6, animation="attack", variant="a6", name_vi="Gậy phép", weapon="optional", kinds=["staff"],
+    "a6": dict(fn=a6, animation="attack", variant="a6", name_vi="Gậy phép", grip="always", kinds=["staff"],
                prompt="casting, raising arm, clenched hand"),
+    "a7": dict(fn=a7, animation="attack", variant="a7", name_vi="Tay trái tung chiêu", grip="always",
+               kinds=["one_handed", "staff"], prompt="casting spell, arm outstretched forward, open palm, other hand clenched"),
 }
 
 
@@ -262,11 +284,11 @@ def build(tid: str) -> dict:
         pts, grounded = solve(p)
         fr = {"points": [None if q is None else [q[0], q[1]] for q in pts],
               "contact": "ground" if grounded else "air"}
-        if spec["weapon"] != "never":
+        if spec["grip"] != "never":
             fr["weapon"] = p.weapon or {"hand": "r", "angle": 0.0, "layer": "front", "stage": 1}
         frames.append(fr)
     return {"id": tid, "animation": spec["animation"], "variant": spec["variant"], "name_vi": spec["name_vi"],
-            "status": spec.get("status", "Proposed"), "weapon": spec["weapon"], "weapon_kinds": spec["kinds"],
+            "status": spec.get("status", "Proposed"), "grip": spec["grip"], "weapon_kinds": spec["kinds"],
             "prompt": spec["prompt"], "rest": [None if q is None else [q[0], q[1]] for q in rest_pts],
             "frames": frames}
 

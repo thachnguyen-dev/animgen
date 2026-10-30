@@ -1,5 +1,5 @@
 """A/B variants of the real engine on one animation, one model load.
-usage: python ab_run.py <character.png> <animation> <out_dir> <variant>...
+usage: python ab_run.py <character.png> <animation> <out_dir> [--frames=4] [--grip] <variant>...
 variant = name:ip=<scale>:cn=<scale>:str=<strength>:far=<far limb darkening>:steps=<n>:style=<extra positive tags, '+' for spaces/commas>
 """
 import json
@@ -15,6 +15,9 @@ from animgen.session import Session  # noqa: E402
 from animgen.tasks import TaskRunner  # noqa: E402
 
 char, anim, out = sys.argv[1], sys.argv[2], Path(sys.argv[3])
+flags = [x for x in sys.argv[4:] if x.startswith("--")]
+ONLY = [0, 2, 4, 6] if "--frames=4" in flags else None   # 4-frame tests (owner, 2026-10-30)
+GRIP = "--grip" in flags
 out.mkdir(parents=True, exist_ok=True)
 base_positive = de.POSITIVE
 DEFAULTS = {"steps": de.STEPS, "cn": de.CONTROL_SCALE, "ip": de.IP_ADAPTER_SCALE, "str": de.STRENGTH, "far": puppet.FAR_DARKEN}
@@ -51,7 +54,7 @@ def _load(progress):
 engine.drawer.load = _load
 runner = TaskRunner()
 results = []
-for spec in sys.argv[4:]:
+for spec in [x for x in sys.argv[4:] if not x.startswith("--")]:
     name, *opts = spec.split(":")
     o = dict(x.split("=", 1) for x in opts)
     de.STEPS = int(o.get("steps", DEFAULTS["steps"]))
@@ -67,13 +70,7 @@ for spec in sys.argv[4:]:
     if engine.drawer.pipe is not None:
         engine.drawer.pipe.set_ip_adapter_scale(de.IP_ADAPTER_SCALE)
     t0 = time.time()
-    weapon = None
-    if anim == "a2":  # the temporary sword (draw_weapons.py)
-        from animgen.session import WeaponChoice
-        w = s.weapons.add("ab-sword", "one_handed", "a", [str(Path(char).parent / "test_sword.png")])
-        s.weapons.set_points(w.id, "a", 1, (70, 35), (548, 35))
-        weapon = WeaponChoice(w.id, "a")
-    task = runner.wait(runner.start(anim, lambda t: s.generate(t, anim, weapon, 1234)).id, timeout=3 * 3600)
+    task = runner.wait(runner.start(anim, lambda t: s.generate(t, anim, GRIP, 1234, ONLY)).id, timeout=3 * 3600)
     if engine.drawer.pipe is not None:
         engine.drawer.pipe.set_ip_adapter_scale(de.IP_ADAPTER_SCALE)
     st = s.state()

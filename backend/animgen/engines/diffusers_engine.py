@@ -236,7 +236,10 @@ class SDXLDrawer:
             mask = Image.new("L", (size, size), 255)
             pose = draw_openpose(req.target_skeleton, (size, size))
 
-        hands = "clenched hands, empty hands, " if req.hands_gripping else ""
+        # Gripping hands are closed around a weapon attached later in the game; a template that names its own hand
+        # shapes (A7: one open palm) keeps them.
+        hands = ("empty hands, " if "clenched" in (req.prompt or "") else "clenched hands, empty hands, ") \
+            if req.hands_gripping else ""
         prompt = self._prompt(look, motion=req.prompt or "standing", hands=hands,
                               bg=BACKGROUND_WORDS.get(tuple(bg), "plain background"))
         negative = NEGATIVE.format(weapon="weapon, holding weapon, holding, sword, dagger, knife, shield, bow, staff, effects")

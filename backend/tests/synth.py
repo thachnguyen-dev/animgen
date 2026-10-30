@@ -77,28 +77,6 @@ def two_figures(path: Path) -> Path:
     return path
 
 
-def sword(path: Path, colour=(200, 200, 215)) -> tuple[Path, tuple[int, int], tuple[int, int]]:
-    """A horizontal sword: handle on the left (grip at x=30), tip at the right."""
-    img = Image.new("RGBA", (360, 60), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    d.rectangle([10, 24, 60, 36], fill=(110, 70, 30, 255))      # handle
-    d.rectangle([60, 10, 72, 50], fill=(180, 150, 40, 255))     # guard
-    d.polygon([(72, 22), (330, 26), (352, 30), (330, 34), (72, 38)], fill=colour + (255,))
-    img.save(path)
-    return path, (32, 30), (350, 30)
-
-
-def bow_stage(path: Path, stage: int) -> tuple[Path, tuple[int, int], tuple[int, int]]:
-    """A vertical bow, string pulled further back with each stage. Grip in the middle, tip at the top."""
-    img = Image.new("RGBA", (160, 420), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    d.arc([60, 10, 200, 410], 100, 260, fill=(120, 80, 40, 255), width=10)
-    pull = {1: 0, 2: 40, 3: 80}[stage]
-    d.line([(70, 25), (70 - pull, 210), (70, 395)], fill=(230, 230, 230, 255), width=2)
-    img.save(path)
-    return path, (66, 210), (78, 22)
-
-
 def opaque(path: Path) -> Path:
     Image.new("RGB", (300, 300), (40, 120, 200)).save(path)
     return path

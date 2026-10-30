@@ -1,13 +1,12 @@
-"""Phase 0 feasibility run (§13.4) on the owner's PC: Idle, Walk, A2 (one-handed) and A5 (bow) on the owner's art.
+"""Phase 0 feasibility run (§13.4) on the owner's PC: animations on one character, one model load.
 
 Measures what the cloud build could not: time per frame, peak GPU memory, and produces contact sheets to judge
-frame consistency, empty-grip hands and the placed weapon by eye. Nothing here is scored automatically (§8.1).
+frame consistency and the gripping hands by eye. Nothing here is scored automatically (§8.1).
 
-  python -m animgen.phase0 --data D:\\AnimGen --character hero.png ^
-      --sword sword.png --sword-grip 32,30 --sword-tip 350,30 ^
-      --bow b1.png b2.png b3.png --bow-grip 66,210 --bow-tip 78,22 --out D:\\phase0
+  python -m animgen.phase0 --data C:\\AnimGen --character hero.png --anims idle walk a2 --frames 4 --out D:\\phase0
 
-Grip and tip are pixel positions in the weapon image (the same points the app's weapon dialog records).
+--frames 4 draws frames 1, 3, 5 and 7 only, to test for half the GPU time (owner, 2026-10-30); the app always
+draws 8. --grip closes the hands where the animation leaves it open (Idle, Walk, Run).
 Use --engine demo to rehearse the run without the GPU.
 """
 
@@ -20,13 +19,10 @@ from pathlib import Path
 
 from PIL import Image
 
-from .session import Session, WeaponChoice
+from .session import Session
 from .tasks import TaskRunner
 
-
-def _xy(s: str) -> tuple[float, float]:
-    x, y = s.split(",")
-    return float(x), float(y)
+DEFAULT_ANIMS = ["idle", "walk", "a1a", "a2", "a5", "a6", "a7"]
 
 
 def sheet(paths: list[str | None], cell: int = 384) -> Image.Image:
@@ -44,16 +40,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--engine", default="diffusers", choices=["diffusers", "demo"])
     ap.add_argument("--character", required=True)
     ap.add_argument("--facing", choices=["left", "right"])
-    ap.add_argument("--sword")
-    ap.add_argument("--sword-grip", type=_xy)
-    ap.add_argument("--sword-tip", type=_xy)
-    ap.add_argument("--bow", nargs=3)
-    ap.add_argument("--bow-grip", type=_xy, help="same points for the 3 stage images")
-    ap.add_argument("--bow-tip", type=_xy, nargs="+", help="one point for all stages, or one per stage")
-    ap.add_argument("--staff")
-    ap.add_argument("--staff-grip", type=_xy)
-    ap.add_argument("--staff-tip", type=_xy)
-    ap.add_argument("--anims", nargs="+", help="animation ids to run instead of the default set")
+    ap.add_argument("--anims", nargs="+", default=DEFAULT_ANIMS, help="animation ids to run")
+    ap.add_argument("--grip", action="store_true", help="hands closed where the animation leaves it open")
+    ap.add_argument("--frames", type=int, choices=[4, 8], default=8)
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--out", required=True)
     a = ap.parse_args(argv)
@@ -68,44 +57,22 @@ def main(argv: list[str] | None = None) -> None:
     ch = s.set_character(a.character, a.facing)
     report["character"] = ch.to_json()
 
-    runs: list[tuple[str, WeaponChoice | None]] = [("idle", None), ("walk", None)]
-    if a.sword:
-        w = s.weapons.add("phase0-sword", "one_handed", "a", [a.sword])
-        s.weapons.set_points(w.id, "a", 1, a.sword_grip, a.sword_tip)
-        runs.append(("a2", WeaponChoice(w.id, "a")))
-    if a.bow:
-        w = s.weapons.add("phase0-bow", "bow", "a", list(a.bow))
-        tips = a.bow_tip * 3 if len(a.bow_tip) == 1 else a.bow_tip
-        if len(tips) != 3:
-            ap.error("--bow-tip takes one point or three")
-        for st in (1, 2, 3):
-            s.weapons.set_points(w.id, "a", st, a.bow_grip, tips[st - 1], apply_to_all_skins=False)
-        runs.append(("a5", WeaponChoice(w.id, "a")))
-    if a.staff:
-        w = s.weapons.add("phase0-staff", "staff", "a", [a.staff])
-        s.weapons.set_points(w.id, "a", 1, a.staff_grip, a.staff_tip)
-        runs.append(("a6", WeaponChoice(w.id, "a")))
-    if a.anims:
-        armed = {an: wp for an, wp in runs if wp is not None}
-        missing = [an for an in a.anims if an in ("a2", "a5", "a6") and an not in armed]
-        if missing:
-            ap.error(f"{', '.join(missing)} need their weapon (--sword, --bow, --staff)")
-        runs = [(an, armed.get(an)) for an in a.anims]
+    only = [0, 2, 4, 6] if a.frames == 4 else None
 
     torch = None
     if a.engine == "diffusers":
         import torch as _t
         torch = _t
     runner = TaskRunner()
-    for anim, weapon in runs:
+    for anim in a.anims:
         if torch is not None:
             torch.cuda.reset_peak_memory_stats()
         t0 = time.time()
-        task = runner.wait(runner.start(anim, lambda t, an=anim, wp=weapon: s.generate(t, an, wp, a.seed)).id,
+        task = runner.wait(runner.start(anim, lambda t, an=anim: s.generate(t, an, a.grip, a.seed, only)).id,
                            timeout=6 * 3600)
         dt = time.time() - t0
         st = s.state()
-        entry = {"animation": anim, "state": task.state, "error": task.error, "seconds": round(dt, 1),
+        entry = {"animation": anim, "grip": st["grip"], "state": task.state, "error": task.error, "seconds": round(dt, 1),
                  "frames": [{k: f[k] for k in ("index", "status", "attempts")} for f in st["frames"]]}
         if torch is not None:
             entry["peak_vram_gb"] = round(torch.cuda.max_memory_allocated() / 1e9, 2)

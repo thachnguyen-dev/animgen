@@ -70,7 +70,8 @@ def test_full_flow(server, tmp_path):
     hero = synth.character(tmp_path / "hero.png")
     st, anims = call(server, "GET", "/animations")
     assert st == 200 and {a["id"] for a in anims if a["ready"]} == {"idle", "walk", "run", "a1a", "a1b", "a2",
-                                                                      "a5", "a6"}
+                                                                      "a5", "a6", "a7"}
+    assert {a["id"]: a["grip"] for a in anims if a["ready"]}["walk"] == "optional"
     st, r = call(server, "POST", "/character", {"path": str(hero), "name": "Hiệp sĩ"})
     assert st == 200 and r["character"]["facing_source"] == "assumed"
     skel = r["character"]["skeleton"]
@@ -82,21 +83,11 @@ def test_full_flow(server, tmp_path):
     st, r = call(server, "POST", "/character/skeleton", {"points": skel["points"]})
     assert st == 200 and r["character"]["skeleton"]["confirmed"]
 
-    sw, g, t = synth.sword(tmp_path / "sw.png")
-    st, w = call(server, "POST", "/weapons", {"name": "Kiếm", "kind": "one_handed", "skin": "bạc",
-                                              "images": [str(sw)]})
-    assert st == 200 and not w["skins"][0]["ready"]
-    st, w = call(server, "POST", "/weapons/points", {"weapon_id": w["id"], "stage": 1, "grip": list(g),
-                                                     "tip": list(t)})
-    assert st == 200 and w["skins"][0]["ready"]
-    st, pv = call(server, "POST", "/weapons/preview", {"weapon_id": w["id"]})
-    assert st == 200 and Path(pv["path"]).is_file()
+    # a bad request fails at once
+    st, err = call(server, "POST", "/generate", {"animation": "walk", "grip": "yes"})
+    assert st == 400 and err["error"]["code"] == "bad_request"
 
-    # a bad choice fails at once with a Vietnamese message
-    st, err = call(server, "POST", "/generate", {"animation": "a1a", "weapon": {"weapon_id": w["id"]}})
-    assert st == 400 and err["error"]["code"] == "weapon_not_allowed" and "vũ khí" in err["error"]["message"]
-
-    st, r = call(server, "POST", "/generate", {"animation": "a2", "weapon": {"weapon_id": w["id"]}})
+    st, r = call(server, "POST", "/generate", {"animation": "a2"})
     assert st == 200
     # one task at a time
     st2, busy = call(server, "POST", "/generate", {"animation": "walk"})
@@ -105,7 +96,7 @@ def test_full_flow(server, tmp_path):
     assert st2 == 200 or busy["error"]["code"] == "busy"
     st, state = call(server, "GET", "/state")
     assert state["complete"] and all(Path(f["preview"]).is_file() for f in state["frames"])
-    assert isinstance(state["frames"][0]["weapon_clipped"], bool)
+    assert state["grip"] is True and state["animation"]["grip"] == "always"
 
     st, r = call(server, "POST", "/regenerate", {"frame": 3})
     wait_task(server, r["task"]["id"])

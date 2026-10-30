@@ -4,7 +4,7 @@
  "variant": null,
  "name_vi": "Chạy",
  "status": "Proposed",
- "weapon": "optional",
+ "grip": "optional",
  "weapon_kinds": [
   "one_handed",
   "two_handed",

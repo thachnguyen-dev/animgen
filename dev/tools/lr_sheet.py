@@ -26,7 +26,7 @@ targets = [fit_frame(f.skeleton, tpl.rest, props, ch.placement.anchor, f.grounde
 if ch.placement.mirrored:
     targets = [t.mirrored(size) for t in targets]
 runs = json.load(open(ab / "ab.json"))
-frames0 = [Image.open(p).convert("RGBA") for p in runs[0]["frames"]]
+frames0 = [Image.open(p).convert("RGBA") for p in runs[0]["frames"] if p]   # 4-frame runs leave gaps
 box = None
 for im in frames0:
     b = im.getchannel("A").getbbox()
@@ -48,6 +48,8 @@ for c, t in enumerate(targets):          # first row: the targets
 for r, run in enumerate(runs, start=1):
     d.text((4, r * (chh + 20)), run["variant"], fill="black")
     for c, p in enumerate(run["frames"]):
+        if not p:
+            continue
         im = Image.open(p).convert("RGBA").crop(box)
         tile = Image.new("RGBA", im.size, (235, 235, 235, 255))
         tile.alpha_composite(im)

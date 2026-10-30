@@ -3,8 +3,8 @@
 All frames are generated facing right (templates face right). A character facing left is mirrored on the way in
 and every finished frame is mirrored back on the way out, so the owner always gets their character's own facing.
 
-The character is drawn once without a weapon (§7). The weapon is placed when a frame is shown or exported, so a
-new skin is only a recombine and all skins have exactly the same motion.
+The app draws characters without weapons (owner, 2026-10-30): the owner attaches weapons in the game. Animations
+made for a weapon draw the hands closed, and the export says where the weapon hand is in every frame.
 """
 
 from __future__ import annotations
@@ -27,10 +27,9 @@ from .errors import AppError
 from .frames import Placement, clean_alpha, fit_to_canvas, place_reference, validate_image
 from .imaging import pick_background_colour, save_png
 from .inputs import CharacterInput, check_character
-from .skeleton import LANK, LHIP, NECK, RANK, RHIP, Proportions, Skeleton, fit_frame, measure
+from .skeleton import LANK, LHIP, NECK, RANK, RHIP, Proportions, Skeleton, fit_frame, hand_point, measure
 from .tasks import Task
 from .templates import MotionTemplate, load_template, ANIMATIONS
-from .weapons import WeaponStore, combine, hand_point, transform_weapon, weapon_clipped
 from . import export as export_mod
 
 
@@ -71,13 +70,6 @@ class Slot:
     attempts: int = 0
     preview: Path | None = None
     candidate_preview: Path | None = None
-    weapon_clipped: bool = False
-
-
-@dataclass
-class WeaponChoice:
-    weapon_id: str
-    skin: str | None
 
 
 class Session:
@@ -89,7 +81,6 @@ class Session:
         # skeleton set by the owner"); scripts and tests use the detected one as it is.
         self.require_confirmed_skeleton = require_confirmed_skeleton
         self.skeleton_dir = self.data_dir / "skeletons"
-        self.weapons = WeaponStore(self.data_dir / "weapons")
         temp_root = self.data_dir / "temp"
         temp_root.mkdir(parents=True, exist_ok=True)
         # Proposed retention (§10.6): this session's frames live until exit; older sessions are removed on start.
@@ -101,7 +92,7 @@ class Session:
         self.character: Character | None = None
         self.template: MotionTemplate | None = None
         self.props: Proportions | None = None
-        self.weapon: WeaponChoice | None = None
+        self.grip = False               # hands drawn closed around a weapon attached later
         self.slots: list[Slot] = [Slot() for _ in range(config.FRAME_COUNT)]
         self.run_seed = 0
         self.background = (255, 255, 255)
@@ -215,22 +206,9 @@ class Session:
         self.slots = [Slot() for _ in range(config.FRAME_COUNT)]
 
     # ------------------------------------------------------------------------------------------------------------
-    # Animation and weapon choice
+    # Animation choice
     # ------------------------------------------------------------------------------------------------------------
-    def _check_choice(self, template: MotionTemplate, weapon: WeaponChoice | None) -> None:
-        if template.weapon == "never" and weapon is not None:
-            raise AppError("weapon_not_allowed")
-        if template.weapon == "required" and weapon is None:
-            raise AppError("weapon_required")
-        if weapon is not None:
-            w = self.weapons.get(weapon.weapon_id)
-            if w.kind not in template.weapon_kinds:
-                raise AppError("weapon_wrong_kind")
-            skin = w.skin(weapon.skin)
-            if not w.ready(skin):
-                raise AppError("weapon_points_missing")
-
-    def prepare(self, animation_id: str, weapon: WeaponChoice | None) -> MotionTemplate:
+    def prepare(self, animation_id: str) -> MotionTemplate:
         if self.character is None:
             raise AppError("no_character")
         if self.require_confirmed_skeleton and not self.character.skeleton_confirmed:
@@ -244,28 +222,21 @@ class Session:
             template = load_template(animation_id)
         except FileNotFoundError as exc:
             raise AppError("animation_not_ready") from exc
-        self._check_choice(template, weapon)
         return template
-
-    def set_weapon(self, weapon: WeaponChoice | None) -> None:
-        """Change weapon or skin for the current frames: recombine only, no AI work (§7)."""
-        with self._lock:
-            if self.template is None:
-                raise AppError("no_frames")
-            self._check_choice(self.template, weapon)
-            self.weapon = weapon
-            self._refresh_previews()
 
     # ------------------------------------------------------------------------------------------------------------
     # Generation
     # ------------------------------------------------------------------------------------------------------------
-    def generate(self, task: Task, animation_id: str, weapon: WeaponChoice | None, seed: int | None = None) -> dict:
-        template = self.prepare(animation_id, weapon)
+    def generate(self, task: Task, animation_id: str, grip: bool | None = None, seed: int | None = None,
+                 only: list[int] | None = None) -> dict:
+        """Draw the animation. ``grip``: the owner's choice where the template leaves it open. ``only``: frame
+        indices (0-based) to draw, for cheaper test runs; the others stay empty and the animation cannot export."""
+        template = self.prepare(animation_id)
         ch = self.character
         assert ch is not None
         with self._lock:
             self.template = template
-            self.weapon = weapon
+            self.grip = template.gripping(grip)
             self._reset_frames()
             self.run_seed = seed if seed is not None else random.randint(1, 2**31 - 1)
             self.props = measure(ch.skeleton, template.rest, ch.placement.figure_height, ch.placement.anchor[1])
@@ -273,7 +244,8 @@ class Session:
                 self.slots[i].skeleton = fit_frame(tf.skeleton, template.rest, self.props, ch.placement.anchor,
                                                    tf.grounded)
         self._ensure_loaded(task)
-        self._run_frames(task, list(range(config.FRAME_COUNT)), regenerate=False)
+        indices = list(range(config.FRAME_COUNT)) if only is None else sorted({self._index(i + 1) for i in only})
+        self._run_frames(task, indices, regenerate=False)
         return self.state()
 
     def regenerate(self, task: Task, frame: int | None) -> dict:
@@ -343,7 +315,7 @@ class Session:
             req = FrameRequest(reference=ch.placement.image, reference_skeleton=ch.skeleton,
                                target_skeleton=slot.skeleton, background=self.background, prompt=tpl.prompt,
                                seed=(self.run_seed + i * 7919 + attempt * 104729) % (2**31 - 1),
-                               hands_gripping=self.weapon is not None or tpl.armed_attack,
+                               hands_gripping=self.grip,
                                extra={"frame_index": i, "template": tpl.id})
             try:
                 rgb = self.engine.drawer.draw(req)
@@ -403,25 +375,14 @@ class Session:
         return self.state()
 
     # ------------------------------------------------------------------------------------------------------------
-    # Weapon combination and previews
+    # Previews
     # ------------------------------------------------------------------------------------------------------------
     def compose(self, base_path: Path, i: int) -> Image.Image:
-        """The finished frame: the character, the weapon placed in the hand, and the original facing."""
-        ch, tpl = self.character, self.template
-        assert ch is not None and tpl is not None
+        """The finished frame in the character's own facing."""
+        ch = self.character
+        assert ch is not None
         with Image.open(base_path) as im:
             frame = im.convert("RGBA")
-        wp = tpl.frames[i].weapon
-        if self.weapon is not None and wp is not None:
-            w = self.weapons.get(self.weapon.weapon_id)
-            skin = w.skin(self.weapon.skin)
-            img, pts = self.weapons.stage_image(w, skin, wp.stage if w.kind == "bow" else 1)
-            hand = hand_point(self.slots[i].skeleton, wp.hand) if self.slots[i].skeleton else None
-            if hand is not None:
-                self.slots[i].weapon_clipped = weapon_clipped(img, pts, hand, wp.angle, ch.placement.scale,
-                                                              frame.size)
-                layer = transform_weapon(img, pts, hand, wp.angle, ch.placement.scale, frame.size)
-                frame = combine(frame, layer, wp.layer)
         if ch.placement.mirrored:
             frame = frame.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         return frame
@@ -430,7 +391,6 @@ class Session:
         s = self.slots[i]
         s.preview = None
         s.candidate_preview = None
-        s.weapon_clipped = False
         if s.base is not None:
             p = self.temp / "preview" / f"p{i + 1}_{uuid.uuid4().hex[:8]}.png"
             save_png(self.compose(s.base, i), p)
@@ -439,28 +399,6 @@ class Session:
             p = self.temp / "preview" / f"c{i + 1}_{uuid.uuid4().hex[:8]}.png"
             save_png(self.compose(s.candidate, i), p)
             s.candidate_preview = p
-
-    def _refresh_previews(self) -> None:
-        for i in range(config.FRAME_COUNT):
-            self._refresh_preview(i)
-
-    def weapon_preview(self, weapon_id: str, skin: str | None, stage: int = 1) -> Path:
-        """The weapon in the character's hand on the reference pose, for the owner to confirm (§4.2)."""
-        ch = self.character
-        if ch is None:
-            raise AppError("no_character")
-        w = self.weapons.get(weapon_id)
-        sk = w.skin(skin)
-        img, pts = self.weapons.stage_image(w, sk, stage)
-        hand = hand_point(ch.skeleton, "l" if w.kind == "bow" else "r") or ch.placement.anchor
-        angle = -90.0 if w.kind in ("bow", "staff") else -45.0
-        layer = transform_weapon(img, pts, hand, angle, ch.placement.scale, ch.placement.image.size)
-        frame = combine(ch.placement.image, layer, "behind" if w.kind == "bow" else "front")
-        if ch.placement.mirrored:
-            frame = frame.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-        p = self.temp / "preview" / f"weapon_{uuid.uuid4().hex[:8]}.png"
-        save_png(frame, p)
-        return p
 
     # ------------------------------------------------------------------------------------------------------------
     # Export
@@ -474,21 +412,17 @@ class Session:
         frames = [self.compose(s.base, i) for i, s in enumerate(self.slots)]
         tpl = self.template
         anim = tpl.animation if tpl.variant is None else f"{tpl.animation}-{tpl.variant}"
-        wname = sname = None
-        if self.weapon is not None:
-            w = self.weapons.get(self.weapon.weapon_id)
-            wname, sname = w.name, w.skin(self.weapon.skin).name
-        name = export_mod.base_name(self.character.name, anim, wname, sname)
+        name = export_mod.base_name(self.character.name, anim)
         paths = export_mod.export_animation(frames, out_dir, height, name,
                                             progress=lambda d, t: task.update(done=d, total=t),
                                             anchors=self.weapon_anchors(height))
         return {"files": [str(p) for p in paths], "folder": str(Path(out_dir)), "height": height}
 
     def weapon_anchors(self, height: int) -> dict | None:
-        """Where the weapon hand is in each exported frame, for attaching a weapon in the game; None for animations
-        without weapon poses (the unarmed attacks)."""
+        """Where the weapon hand is in each exported frame, for attaching a weapon in the game; None when the hands
+        were not drawn gripping."""
         tpl, ch = self.template, self.character
-        if tpl is None or ch is None or not any(f.weapon for f in tpl.frames):
+        if tpl is None or ch is None or not self.grip or not any(f.weapon for f in tpl.frames):
             return None
         canvas = ch.placement.image.width
         k = height / canvas
@@ -504,14 +438,16 @@ class Session:
                 x, angle = canvas - 1 - x, 180.0 - angle
             frames.append({"index": i + 1, "weapon": True, "x": round(x * k, 2), "y": round(y * k, 2),
                            "angle": round((angle + 180.0) % 360.0 - 180.0, 2), "layer": wp.layer,
-                           "bow_stage": wp.stage, "hand": "right" if wp.hand == "r" else "left"})
+                           "bow_stage": wp.stage, "hand": "near" if wp.hand == "r" else "far"})
         return {
+            "animation": tpl.id, "weapon_kinds": tpl.weapon_kinds,
             "frame_size": [height, height],
             "weapon_scale": round(ch.placement.scale * k, 5),
             "about": "x, y: the middle of the weapon hand, pixels from the frame's top left. angle: degrees from the "
                      "grip towards the tip, 0 = pointing right, 90 = pointing down (in Unity, z rotation = -angle). "
                      "layer: weapon in front of or behind the character. weapon_scale: multiply a weapon drawn at "
-                     "the character image's pixel scale by this. hand: the character's own hand.",
+                     "the character image's pixel scale by this. hand: near = the arm on the viewer's side, far = the "
+                     "arm behind the body.",
             "frames": frames,
         }
 
@@ -523,13 +459,11 @@ class Session:
                 "engine": self.engine.name, "demo": self.engine.is_demo, "models_loaded": self.engine.loaded,
                 "character": self.character.to_json() if self.character else None,
                 "animation": None if tpl is None else {"id": tpl.id, "name_vi": tpl.name_vi, "status": tpl.status,
-                                                       "weapon": tpl.weapon},
-                "weapon": None if self.weapon is None else {"weapon_id": self.weapon.weapon_id,
-                                                            "skin": self.weapon.skin},
+                                                       "grip": tpl.grip},
+                "grip": self.grip,
                 "auto_retries": self.auto_retries,
                 "frames": [{
                     "index": n + 1, "status": s.status, "attempts": s.attempts, "error": s.error,
-                    "weapon_clipped": s.weapon_clipped,
                     "preview": str(s.preview) if s.preview else None,
                     "candidate_status": s.candidate_status,
                     "candidate_preview": str(s.candidate_preview) if s.candidate_preview else None,

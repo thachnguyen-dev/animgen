@@ -108,9 +108,6 @@
                     <TextBlock Text="Có bản mới" Style="{StaticResource TextMuted}" FontWeight="SemiBold"
                                Foreground="{StaticResource BrushAccentHover}"
                                Visibility="{Binding HasCandidate, Converter={StaticResource BoolToVis}}"/>
-                    <TextBlock Text="Vũ khí bị cắt" Style="{StaticResource TextMuted}"
-                               Foreground="{StaticResource BrushWarning}"
-                               Visibility="{Binding WeaponClipped, Converter={StaticResource BoolToVis}}"/>
                 </StackPanel>
             </Button>
         </DataTemplate>
@@ -190,15 +187,8 @@
                             </ComboBox>
                             <TextBlock Text="{Binding AnimationNote}" Style="{StaticResource TextMuted}" Margin="{StaticResource SpaceGap}"/>
 
-                            <StackPanel Visibility="{Binding ShowWeapon, Converter={StaticResource BoolToVis}}">
-                                <TextBlock Text="Vũ khí" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                                <ComboBox ItemsSource="{Binding WeaponOptions}" SelectedItem="{Binding SelectedWeapon}"
-                                          AutomationProperties.Name="Vũ khí"/>
-                                <TextBlock Text="Màu (skin)" FontWeight="SemiBold" Margin="0,0,0,4"/>
-                                <ComboBox ItemsSource="{Binding Skins}" SelectedItem="{Binding SelectedSkin}"
-                                          DisplayMemberPath="Name" AutomationProperties.Name="Màu vũ khí"/>
-                                <Button Content="Thêm vũ khí hoặc màu…" Click="AddWeapon_Click" HorizontalAlignment="Left"/>
-                            </StackPanel>
+                            <CheckBox Content="Tay nắm (để gắn vũ khí trong game)" IsChecked="{Binding Grip}"
+                                      Visibility="{Binding ShowGrip, Converter={StaticResource BoolToVis}}"/>
                         </StackPanel>
                     </Border>
 

@@ -22,8 +22,3 @@ def session(tmp_path) -> Session:
     s = Session(DemoEngine(), tmp_path / "data")
     yield s
     s.close()
-
-
-@pytest.fixture
-def sword(tmp_path):
-    return synth.sword(tmp_path / "sword.png")

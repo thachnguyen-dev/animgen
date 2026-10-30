@@ -19,7 +19,7 @@ class Placement:
     """Where the reference character sits on the canvas. Every frame uses the same scale and foot anchor."""
 
     image: Image.Image        # canvas-sized RGBA with the reference character
-    scale: float              # original pixels -> canvas pixels (weapons use the same scale)
+    scale: float              # original pixels -> canvas pixels (the hand anchor scale too)
     anchor: tuple[float, float]  # (x, foot line y) on the canvas
     figure_height: float      # in canvas pixels
     mirrored: bool            # the reference was mirrored so the figure faces right

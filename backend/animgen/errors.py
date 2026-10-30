@@ -17,16 +17,6 @@ MESSAGES_VI: dict[str, str] = {
     "input_no_transparency": "Ảnh có kênh alpha nhưng gần như không có phần nào trong suốt.",
     "input_empty": "Không thấy nhân vật trong ảnh (ảnh gần như trong suốt hoàn toàn).",
     "input_many_figures": "Ảnh có {count} hình tách rời. Mỗi ảnh chỉ được có một nhân vật.",
-    # Weapons (§4.2)
-    "weapon_unreadable": "Không mở được ảnh vũ khí: {name}.",
-    "weapon_no_alpha": "Ảnh vũ khí phải có nền trong suốt thật: {name}.",
-    "weapon_bow_needs_three": "Cung cần đúng 3 ảnh: nghỉ, kéo nửa, kéo căng.",
-    "weapon_points_missing": "Chưa đặt điểm cầm và đầu mũi cho vũ khí này.",
-    "weapon_points_invalid": "Điểm cầm và đầu mũi phải nằm trong ảnh và không trùng nhau.",
-    "weapon_not_found": "Không tìm thấy vũ khí đã chọn.",
-    "weapon_required": "Kiểu đòn này cần chọn vũ khí.",
-    "weapon_not_allowed": "Đòn tay không không dùng vũ khí.",
-    "weapon_wrong_kind": "Vũ khí này không hợp với kiểu đòn đã chọn.",
     # Generation
     "no_character": "Hãy chọn ảnh nhân vật trước.",
     "skeleton_unconfirmed": "Hãy kiểm tra và xác nhận khung xương của nhân vật trước khi tạo.",
