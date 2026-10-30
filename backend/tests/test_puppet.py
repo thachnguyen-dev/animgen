@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image, ImageDraw
 
-from animgen.puppet import repose
+from animgen.puppet import repose, repose_with_depth
 from animgen.skeleton import LELB, LWRI, RELB, RWRI, Skeleton
 
 # A standing side-view stick figure, canvas 1024 (OpenPose order, the face points right).
@@ -61,8 +61,36 @@ def test_cape_far_from_the_arm_stays_with_the_body():
     assert red[400:740, 405:435].mean() > 0.9                       # the cape did not swing with the arm
 
 
+def test_body_hidden_by_a_wide_arm_is_filled_when_the_arm_moves():
+    ref = figure()
+    d = ImageDraw.Draw(ref)
+    d.rectangle((405, 370, 420, 700), fill=(200, 30, 30, 255))       # a cape behind the back, a gap before the torso
+    d.rectangle((415, 380, 490, 560), fill=(40, 40, 200, 255))       # a wide armoured arm over the gap and the back
+    pts = list(STAND)
+    pts[RELB] = pts[LELB] = (465, 470)                                # the arm hangs along the back edge
+    pts[RWRI] = pts[LWRI] = (465, 560)
+    sk = Skeleton(pts)
+    tgt = list(STAND)
+    tgt[RELB], tgt[RWRI] = (560, 420), (620, 380)                    # both arms swing forward
+    tgt[LELB], tgt[LWRI] = (560, 420), (620, 380)
+    out = np.array(repose(ref, sk, Skeleton(tgt)))
+    assert (out[430:540, 435:470, 3] > 200).mean() > 0.9             # no background pocket where the arm was
+
+
 def test_loose_specks_are_dropped():
     ref, sk = figure(), Skeleton(list(STAND))
     ImageDraw.Draw(ref).ellipse((700, 900, 704, 904), fill=(0, 0, 255, 255))   # a tiny detached piece
     out = np.array(repose(ref, sk, Skeleton(list(STAND))))
     assert out[898:906, 698:706, 3].max() == 0
+
+
+def test_depth_guide_shows_the_near_leg_in_front():
+    from animgen.skeleton import LANK, LKNE, RANK, RKNE
+    ref, sk = figure(), Skeleton(list(STAND))
+    tgt = list(STAND)
+    tgt[RKNE], tgt[RANK] = (560, 720), (600, 870)                    # near leg forward
+    tgt[LKNE], tgt[LANK] = (440, 720), (400, 870)                    # far leg back
+    img, depth = repose_with_depth(ref, sk, Skeleton(tgt))
+    d = np.array(depth)
+    assert d.shape == (1024, 1024) and d[5, 5] == 0                  # black background
+    assert d[790, 580] > d[790, 420] + 60                            # the near shin is brighter (closer)

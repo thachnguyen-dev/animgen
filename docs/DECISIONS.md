@@ -186,6 +186,35 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   - The per-frame hand anchor file (`<name>_weapon.json`: hand x/y in exported pixels, angle, layer, bow stage) is
     kept and exported for every animation whose template has weapon poses, as the aid for attaching weapons later.
   - Character images must be weapon-free (unchanged from "Input images").
+- Implemented 2026-10-30 (commit d2b4210): weapon images, the weapon store, compositing, the weapon dialog and the
+  weapon routes are gone. Templates carry `grip`: `never` (A1a, A1b), `optional` (Idle, Walk, Run: the owner ticks
+  "Tay nắm" in the app) or `always` (A2, A5, A6, A7). The hand anchor file is written whenever the hands were drawn
+  gripping; its `hand` is `near` (the arm on the viewer's side) or `far`, because for a character facing left the
+  near arm is anatomically its left one.
+
+## Owner requests on the attacks (2026-10-30) — Confirmed by the owner, poses Proposed
+
+- New attack A7 "Tay trái tung chiêu": the left hand reaches forward to cast a skill while the main arm keeps
+  holding the weapon in its Idle pose. In the template (facing right) the casting arm is the far arm and the weapon
+  arm the near one; the hand anchors follow the near (weapon) hand. Prompt asks for an open palm on the cast.
+- A1a punch reworked: the arm swings from behind to the front while the fist comes down from above (overhand):
+  guard, draw back, load behind the head, over the top, forward, down and through, recovery, guard.
+- Test runs may draw 4 frames (1, 3, 5, 7) to save GPU time: `phase0 --frames 4`, `ab_run.py --frames=4`.
+  The app and exports always use 8 (Rule 16).
+
+## Left/right accuracy: depth guide (2026-10-30) — Proposed, on test art only
+
+- Owner: frames where the model does not tell the character's left side from its right. Walk on the test archer
+  (4 frames): the model drew the same leg in front in frames 3 and 7, where the template swaps them, so the cycle
+  looked like half a step repeated. Darker far limbs (0.5), pose guide 1.0 and repaint 0.5 changed nothing: the pose
+  guide says where the limbs are, not which one is in front.
+- Fix: a depth guide built from the puppet layers (far limbs dark, body mid, near legs and arms bright) as a second
+  ControlNet Union control (mode 1) next to the pose (`puppet.repose_with_depth`, `DEPTH_SCALE`). A/B 0 / 0.5 / 0.8 /
+  0.8 with repaint 0.7: at 0.8 the near arm and leg follow the template better (frame 3), looks unchanged; repaint
+  0.7 drifts the face. Default 0.8. Not yet confirmed on the punch load frame (fist behind the head): that run was
+  stopped by the system for low memory.
+- Also fixed: a wide arm (armour) moving away left a background pocket between the cape and the back, painted as a
+  white patch (knight). The body the arm hid is now filled before the model repaints (`BODY_CLOSE`).
 
 ## Not done on purpose
 

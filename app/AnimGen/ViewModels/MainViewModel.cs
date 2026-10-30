@@ -185,8 +185,7 @@ public sealed class MainViewModel : ObservableObject
     public string FramesSummary { get => _framesSummary; private set => Set(ref _framesSummary, value); }
 
     public bool CanGenerate =>
-        Ready && !IsBusy && _characterPath != null && _skeleton is { Confirmed: true } && SelectedAnimation is { Ready: true }
-;
+        Ready && !IsBusy && _characterPath != null && _skeleton is { Confirmed: true } && SelectedAnimation is { Ready: true };
 
     public ICommand ChooseCharacterCommand { get; }
     public ICommand FlipFacingCommand { get; }

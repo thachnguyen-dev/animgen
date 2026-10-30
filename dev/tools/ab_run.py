@@ -1,6 +1,6 @@
 """A/B variants of the real engine on one animation, one model load.
 usage: python ab_run.py <character.png> <animation> <out_dir> [--frames=4] [--grip] <variant>...
-variant = name:ip=<scale>:cn=<scale>:str=<strength>:far=<far limb darkening>:steps=<n>:style=<extra positive tags, '+' for spaces/commas>
+variant = name:ip=<scale>:cn=<scale>:depth=<scale>:str=<strength>:far=<far limb darkening>:steps=<n>:style=<extra positive tags, '+' for spaces/commas>
 """
 import json
 import sys
@@ -20,7 +20,7 @@ ONLY = [0, 2, 4, 6] if "--frames=4" in flags else None   # 4-frame tests (owner,
 GRIP = "--grip" in flags
 out.mkdir(parents=True, exist_ok=True)
 base_positive = de.POSITIVE
-DEFAULTS = {"steps": de.STEPS, "cn": de.CONTROL_SCALE, "ip": de.IP_ADAPTER_SCALE, "str": de.STRENGTH, "far": puppet.FAR_DARKEN}
+DEFAULTS = {"steps": de.STEPS, "cn": de.CONTROL_SCALE, "ip": de.IP_ADAPTER_SCALE, "str": de.STRENGTH, "far": puppet.FAR_DARKEN, "depth": de.DEPTH_SCALE}
 engine = make_engine("diffusers", Path(r"C:\AnimGen\models"))
 RAW = {"dir": out, "n": 0}
 
@@ -62,6 +62,7 @@ for spec in [x for x in sys.argv[4:] if not x.startswith("--")]:
     de.IP_ADAPTER_SCALE = float(o.get("ip", DEFAULTS["ip"]))
     de.STRENGTH = float(o.get("str", DEFAULTS["str"]))
     puppet.FAR_DARKEN = float(o.get("far", DEFAULTS["far"]))
+    de.DEPTH_SCALE = float(o.get("depth", DEFAULTS["depth"]))
     style = o.get("style", "").replace("+", " ").replace("|", ", ")
     de.POSITIVE = base_positive.replace("{motion}, ", "{motion}, " + (style + ", " if style else ""))
     RAW["tag"], RAW["n"] = name, 0

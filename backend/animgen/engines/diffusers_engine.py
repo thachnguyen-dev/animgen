@@ -33,7 +33,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from ..puppet import repose
+from ..puppet import repose_with_depth
 from ..skeleton import Skeleton, draw_openpose
 from .base import Engine, EngineError, FrameRequest, ProgressFn
 from .dwpose import DWPoseReader
@@ -44,6 +44,9 @@ STRENGTH = 0.6                  # TUNE: share of the rough repose that is repain
                                 # 0.75 starts to redraw the outfit; 1.0 (from noise) lost the character entirely.
 GUIDANCE = 5.0                  # TUNE (Animagine 4 recommends 4–7)
 CONTROL_SCALE = 0.9             # TUNE
+DEPTH_SCALE = 0.8               # TUNE: depth guide from the puppet layers (Union mode 1); 0 = pose guide only.
+                                # Walk A/B 2026-10-30 (0 / 0.5 / 0.8): 0.8 put the near leg and arm in front
+                                # where pose alone drew the same leg in front in every frame; looks unchanged.
 IP_ADAPTER_SCALE = 0.8          # TUNE: A/B on Idle (2026-10-30): 0.8 kept the reference's colours and darker
 #                                 outlines better than 0.6; strength 0.5 changed little; style tags (thick outlines) were
 #                                 bolder but would force one line style on every character
@@ -216,7 +219,7 @@ class SDXLDrawer:
         ref_flat = Image.new("RGB", req.reference.size, bg)
         ref_flat.paste(req.reference, mask=req.reference.getchannel("A"))
 
-        rough = repose(req.reference, req.reference_skeleton, req.target_skeleton)
+        rough, depth = repose_with_depth(req.reference, req.reference_skeleton, req.target_skeleton)
         rough_flat = Image.new("RGB", rough.size, bg)
         rough_flat.paste(rough, mask=rough.getchannel("A"))
 
@@ -230,11 +233,15 @@ class SDXLDrawer:
             pose = np.zeros((size, width, 3), np.uint8)
             draw_openpose(req.reference_skeleton, (size, size), canvas=pose[:, :size])
             draw_openpose(req.target_skeleton, (size, size), canvas=pose[:, size:])
+            depth_img = Image.new("L", (width, size), 0)
+            depth_img.paste(repose_with_depth(req.reference, req.reference_skeleton, req.reference_skeleton)[1], (0, 0))
+            depth_img.paste(depth, (size, 0))
         else:
             width = size
             canvas = rough_flat
             mask = Image.new("L", (size, size), 255)
             pose = draw_openpose(req.target_skeleton, (size, size))
+            depth_img = depth
 
         # Gripping hands are closed around a weapon attached later in the game; a template that names its own hand
         # shapes (A7: one open palm) keeps them.
@@ -243,16 +250,21 @@ class SDXLDrawer:
         prompt = self._prompt(look, motion=req.prompt or "standing", hands=hands,
                               bg=BACKGROUND_WORDS.get(tuple(bg), "plain background"))
         negative = NEGATIVE.format(weapon="weapon, holding weapon, holding, sword, dagger, knife, shield, bow, staff, effects")
+        controls, modes, scales = [Image.fromarray(pose)], [0], [CONTROL_SCALE]
+        if DEPTH_SCALE > 0:
+            controls.append(depth_img.convert("RGB"))
+            modes.append(1)
+            scales.append(DEPTH_SCALE)
         gen = torch.Generator(device="cpu").manual_seed(int(req.seed))
         try:
             with torch.inference_mode():
                 out = self.pipe(prompt=prompt, negative_prompt=negative, image=canvas, mask_image=mask,
                                 # Pose mode only: adding the inpaint mode (7) left the right half an empty flat
                                 # field whenever the pose differed from the reference (Phase 0 on test art).
-                                control_image=[Image.fromarray(pose)], control_mode=[0],
+                                control_image=controls, control_mode=modes,
                                 ip_adapter_image=ref_flat, width=width, height=size,
                                 num_inference_steps=STEPS, guidance_scale=GUIDANCE, strength=STRENGTH,
-                                controlnet_conditioning_scale=CONTROL_SCALE, generator=gen).images[0]
+                                controlnet_conditioning_scale=scales, generator=gen).images[0]
         except Exception as exc:  # noqa: BLE001
             if _is_oom(exc):
                 raise EngineError("oom", str(exc)) from exc

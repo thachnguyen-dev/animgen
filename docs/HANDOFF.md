@@ -64,3 +64,11 @@ PowerShell scripts.
   cn=1.0 / str=0.5, judged with `dev/tools/lr_sheet.py`.
 - Western batch stopped at the pause: knight (old code), archer, archer34 done; mage and hero not run.
 - The published C:/AnimGen backend is outdated (no tagger, puppet fixes, weapon anchors): republish with the app closed.
+
+## Resumed 2026-10-30 (after the second pause)
+
+- Weaponless app (d2b4210): grip choice, A7 cast, overhand A1a, 4-frame test runs. Depth guide and the cape-pocket
+  fill: see DECISIONS.md "Left/right accuracy".
+- Next: rerun `python -m animgen.phase0 --character dev/test_art/test_knight.png --anims a1a walk --frames 4` (was
+  stopped for low memory) and check the punch load frame and the cape; then republish to C:/AnimGen with the app
+  closed and check the "Tay nắm" checkbox colour in the running app.

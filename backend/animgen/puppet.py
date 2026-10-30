@@ -37,8 +37,14 @@ LIMB_REACH = {"uarm": 0.07, "larm": 0.07, "uleg": 0.08, "lleg": 0.08}
 SPECK_SHARE = 0.01         # loose pieces smaller than this share of the largest piece are dropped from the result
 FOOT_REACH = 0.14          # the foot sticks out past the ankle: the lower leg also keeps everything this close to it
 FILL_RADIUS = 5
+BODY_CLOSE = 0.12          # of the figure height: closing size for the outline of the body without the arms
+HOLE_SHARE = 0.04          # enclosed background pockets up to this share of the figure are filled (see _fill_holes)
 DRAW_ORDER_FAR = (("uleg_far", "uleg"), ("lleg_far", "lleg"), ("uarm_far", "uarm"), ("larm_far", "larm"))
 DRAW_ORDER_NEAR = ("uleg", "lleg", "torso", "head", "uarm", "larm")
+# Depth guide (near = bright, as depth ControlNets read it): it tells the model which limb is in front, which the
+# pose guide does not. Walk tests on 2026-10-30 drew the same leg in front in every frame (left/right swap).
+DEPTH = {"far": 70, "body": 150, "near_leg": 190, "near_arm": 235}
+DEPTH_BLUR = 9            # px: soft edges, as estimated depth maps have
 
 
 def _mid(p: Point | None, q: Point | None) -> Point | None:
@@ -120,22 +126,37 @@ def _cut(arr: np.ndarray, ref_skeleton: Skeleton, ref_bones: dict) -> tuple[list
             near = _segment_distance(xs, ys, *ref_bones[arm]) < radius
             torso_extra |= near & (label == names.index("torso"))
             label[near] = names.index(arm)
+    # A wide arm (armour, sleeves) also hides body further from its bone: where it covers a spot inside the outline of
+    # the body without the arms (knight test, 2026-10-30: between the cape and the back), that spot is body as well.
+    arms = [names.index(a) for a in ("uarm", "larm") if a in names]
+    body = alpha & ~np.isin(label, arms)
+    k = max(3, int(BODY_CLOSE * (max(ys_all) - min(ys_all))) | 1)
+    hull = cv2.morphologyEx(body.astype(np.uint8), cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+    torso_extra |= (hull > 0) & alpha & np.isin(label, arms)
     return names, label, alpha, torso_extra
 
 
 def repose(reference: Image.Image, ref_skeleton: Skeleton, target: Skeleton) -> Image.Image:
     """The reference figure (RGBA, facing right) moved onto ``target``; same canvas size, transparent around."""
+    return repose_with_depth(reference, ref_skeleton, target)[0]
+
+
+def repose_with_depth(reference: Image.Image, ref_skeleton: Skeleton,
+                      target: Skeleton) -> tuple[Image.Image, Image.Image]:
+    """``repose`` plus a depth guide of the same figure (L image, black background, near parts brighter)."""
     arr = np.array(reference.convert("RGBA"))
     h, w = arr.shape[:2]
     ref_bones = {k: v for k, v in _reference_bones(ref_skeleton).items() if v[0] is not None and v[1] is not None}
     tgt_bones = _target_bones(target)
     if "torso" not in ref_bones or tgt_bones["torso"][0] is None or tgt_bones["torso"][1] is None:
-        return reference.convert("RGBA").copy()
+        img = reference.convert("RGBA").copy()
+        return img, Image.fromarray(np.where(np.array(img)[..., 3] > 127, DEPTH["body"], 0).astype(np.uint8), "L")
     names, label, alpha, torso_extra = _cut(arr, ref_skeleton, ref_bones)
     out = np.zeros_like(arr)
+    depth = np.zeros((h, w), np.uint8)
     grow = np.ones((PART_GROW, PART_GROW), np.uint8)
 
-    def paste(target_name: str, part: str, darken: float = 1.0) -> None:
+    def paste(target_name: str, part: str, darken: float = 1.0, level: int = DEPTH["body"]) -> None:
         a2, b2 = tgt_bones.get(target_name, (None, None))
         if part not in ref_bones or a2 is None or b2 is None:
             return
@@ -153,15 +174,21 @@ def repose(reference: Image.Image, ref_skeleton: Skeleton, target: Skeleton) -> 
         k = moved[..., 3:4].astype(np.float32) / 255
         out[..., :3] = (moved[..., :3] * k + out[..., :3] * (1 - k)).astype(np.uint8)
         out[..., 3] = np.maximum(out[..., 3], moved[..., 3])
+        depth[moved[..., 3] > 127] = level
 
     for far, part in DRAW_ORDER_FAR:
-        paste(far, part, FAR_DARKEN)
+        paste(far, part, FAR_DARKEN, DEPTH["far"])
     for part in DRAW_ORDER_NEAR:
         if part == "uarm":  # torso, head and legs are in place: fill what the arm left uncovered in the torso
             _fill_torso_gap(out, torso_extra, ref_bones["torso"], tgt_bones["torso"])
-        paste(part, part)
+        level = DEPTH["near_arm"] if part in ("uarm", "larm") else DEPTH["near_leg"] if part in ("uleg", "lleg") \
+            else DEPTH["body"]
+        paste(part, part, level=level)
     _drop_specks(out)
-    return Image.fromarray(out, "RGBA")
+    _fill_holes(out, depth, _holes(arr[..., 3]), ref_bones["torso"], tgt_bones["torso"])
+    depth[out[..., 3] == 0] = 0
+    depth = cv2.GaussianBlur(depth, (0, 0), DEPTH_BLUR / 2) if DEPTH_BLUR else depth
+    return Image.fromarray(out, "RGBA"), Image.fromarray(depth, "L")
 
 
 def _drop_specks(out: np.ndarray) -> None:
@@ -173,6 +200,40 @@ def _drop_specks(out: np.ndarray) -> None:
     for i, area in enumerate(areas, start=1):
         if area < SPECK_SHARE * areas.max():
             out[comp == i] = 0
+
+
+def _holes(alpha: np.ndarray) -> np.ndarray:
+    """Background pixels enclosed by the figure (not connected to the image border)."""
+    bg = (alpha <= 20).astype(np.uint8)
+    n, comp, stats, _ = cv2.connectedComponentsWithStats(bg, connectivity=4)
+    h, w = alpha.shape
+    edge = set(np.unique(np.concatenate([comp[0], comp[-1], comp[:, 0], comp[:, -1]])).tolist())
+    return np.isin(comp, [i for i in range(1, n) if i not in edge])
+
+
+def _fill_holes(out: np.ndarray, depth: np.ndarray, ref_holes: np.ndarray, bone: tuple, bone_target: tuple) -> None:
+    """A limb moved away from where it covered the body leaves a pocket of background inside the figure (knight test,
+    2026-10-30: between the cape and the back), which the model paints as background, a white patch. Small pockets
+    the reference does not have are filled from the colours around them."""
+    holes = _holes(out[..., 3])
+    if not holes.any():
+        return
+    h, w = holes.shape
+    mat = _similarity(bone[0], bone[1], bone_target[0], bone_target[1])
+    kept = cv2.warpAffine(ref_holes.astype(np.uint8), mat, (w, h), flags=cv2.INTER_NEAREST) > 0
+    n, comp, stats, _ = cv2.connectedComponentsWithStats(holes.astype(np.uint8), connectivity=4)
+    limit = HOLE_SHARE * float((out[..., 3] > 20).sum())
+    fill = np.zeros((h, w), bool)
+    for i in range(1, n):
+        m = comp == i
+        if stats[i, cv2.CC_STAT_AREA] <= limit and (m & kept).sum() < 0.5 * stats[i, cv2.CC_STAT_AREA]:
+            fill |= m
+    if not fill.any():
+        return
+    mask = fill.astype(np.uint8) * 255
+    out[..., :3] = cv2.inpaint(np.ascontiguousarray(out[..., :3]), mask, FILL_RADIUS, cv2.INPAINT_TELEA)
+    out[fill, 3] = 255
+    depth[fill] = DEPTH["body"]
 
 
 def _fill_torso_gap(out: np.ndarray, gap_ref: np.ndarray, bone: tuple, bone_target: tuple) -> None:
