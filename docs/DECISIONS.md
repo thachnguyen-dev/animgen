@@ -174,6 +174,19 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
 - DWPose stays as the pre-fill. If Phase 0 shows it is wrong on most of the owner's art, it can be dropped and the
   pre-fill comes from standard proportions alone.
 
+## Weaponless character animation only (owner, 2026-10-30) — Confirmed
+
+- Owner: "having users attach weapons themselves afterward is more effective. Therefore, the application will now
+  focus on generating weaponless character animations." This replaces Option C (v1.4: the app composites separate
+  weapon images per frame).
+- Consequences decided by me (design delegated, purpose kept):
+  - No weapon images as input, no weapon compositing, no weapon grip/tip clicks; the weapon controls leave the app.
+  - The attack variants stay as motions (A1a, A1b unarmed; A2 one-handed, A5 bow, A6 staff), drawn without a weapon.
+    In the weapon-type attacks the hands keep their grip pose, so a weapon attached later sits in a closed hand.
+  - The per-frame hand anchor file (`<name>_weapon.json`: hand x/y in exported pixels, angle, layer, bow stage) is
+    kept and exported for every animation whose template has weapon poses, as the aid for attaching weapons later.
+  - Character images must be weapon-free (unchanged from "Input images").
+
 ## Not done on purpose
 
 - No free-form prompts, no batch generation, no automatic quality scoring, no Unity configuration files, no
