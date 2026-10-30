@@ -1,8 +1,9 @@
 """The real engine (§6.5, §9.2). Needs an NVIDIA GPU and the model folders; NOT run in the cloud build.
 
-Per frame:
-  1. A wide canvas: the reference character in the left half, flat background in the right half.
-  2. Inpaint the right half with Animagine XL 4.0 guided by ControlNet Union ProMax (pose + inpaint modes),
+Per frame (local finalisation, 2026-10-30; see DECISIONS.md "Drawing method"):
+  1. A wide canvas: the reference character in the left half; in the right half the reference cut into body parts
+     and moved onto the target skeleton (puppet.repose), on the flat background.
+  2. Repaint the right half partly (STRENGTH) with Animagine XL 4.0 guided by ControlNet Union ProMax in pose mode,
      the pose control showing the reference skeleton on the left and the target skeleton on the right.
   3. IP-Adapter Plus also feeds the reference as an image prompt.
   4. ToonOut (BiRefNet fine-tuned for anime) gives real alpha.
@@ -31,11 +32,14 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from ..puppet import repose
 from ..skeleton import Skeleton, draw_openpose
 from .base import Engine, EngineError, FrameRequest, ProgressFn
 from .dwpose import DWPoseReader
 
-STEPS = 28                      # TUNE
+STEPS = 28                      # TUNE (with STRENGTH 0.6 about 17 of them run)
+STRENGTH = 0.6                  # TUNE: share of the rough repose that is repainted. Probes: 0.45 leaves cut seams,
+                                # 0.75 starts to redraw the outfit; 1.0 (from noise) lost the character entirely.
 GUIDANCE = 5.0                  # TUNE (Animagine 4 recommends 4–7)
 CONTROL_SCALE = 0.9             # TUNE
 IP_ADAPTER_SCALE = 0.6          # TUNE
@@ -47,11 +51,15 @@ DRAW_SIZE = 768
 
 BACKGROUND_WORDS = {(255, 255, 255): "white background", (128, 128, 128): "grey background",
                     (40, 40, 40): "black background"}
-POSITIVE = ("solo, full body, from side, {motion}, {hands}simple background, {bg}, "
+# Templates face right, and the reference panel shows the character facing right (§ Facing in DECISIONS.md).
+POSITIVE = ("solo, full body, from side, profile, facing right, {motion}, {hands}simple background, {bg}, "
             "masterpiece, high score, great score, absurdres")
+# Phase 0 on test art (2026-10-30): frames turned away or faced left, and one held a second, faint figure.
 NEGATIVE = ("lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, extra arms, extra legs, "
             "cropped, out of frame, worst quality, low quality, low score, bad score, average score, signature, "
-            "watermark, username, blurry, text, shadow, gradient background, scenery, {weapon}")
+            "watermark, username, blurry, text, shadow, gradient background, scenery, multiple views, "
+            "character sheet, reference sheet, 2boys, 2girls, multiple boys, multiple girls, from behind, "
+            "looking back, facing left, {weapon}")
 
 REQUIRED = [
     "animagine-xl-4.0/model_index.json",
@@ -185,23 +193,25 @@ class SDXLDrawer:
         ref_flat = Image.new("RGB", req.reference.size, bg)
         ref_flat.paste(req.reference, mask=req.reference.getchannel("A"))
 
+        rough = repose(req.reference, req.reference_skeleton, req.target_skeleton)
+        rough_flat = Image.new("RGB", rough.size, bg)
+        rough_flat.paste(rough, mask=rough.getchannel("A"))
+
         if REFERENCE_PANEL:
             width = size * 2
             canvas = Image.new("RGB", (width, size), bg)
             canvas.paste(ref_flat, (0, 0))
+            canvas.paste(rough_flat, (size, 0))
             mask = Image.new("L", (width, size), 0)
             mask.paste(255, (size, 0, width, size))
             pose = np.zeros((size, width, 3), np.uint8)
             draw_openpose(req.reference_skeleton, (size, size), canvas=pose[:, :size])
             draw_openpose(req.target_skeleton, (size, size), canvas=pose[:, size:])
-            masked = np.asarray(canvas).copy()
-            masked[:, size:] = 0
         else:
             width = size
-            canvas = Image.new("RGB", (size, size), bg)
+            canvas = rough_flat
             mask = Image.new("L", (size, size), 255)
             pose = draw_openpose(req.target_skeleton, (size, size))
-            masked = np.zeros((size, size, 3), np.uint8)
 
         hands = "clenched hands, empty hands, " if req.hands_gripping else ""
         prompt = POSITIVE.format(motion=req.prompt or "standing", hands=hands,
@@ -211,9 +221,11 @@ class SDXLDrawer:
         try:
             with torch.inference_mode():
                 out = self.pipe(prompt=prompt, negative_prompt=negative, image=canvas, mask_image=mask,
-                                control_image=[Image.fromarray(pose), Image.fromarray(masked)],
-                                control_mode=[0, 7], ip_adapter_image=ref_flat, width=width, height=size,
-                                num_inference_steps=STEPS, guidance_scale=GUIDANCE, strength=1.0,
+                                # Pose mode only: adding the inpaint mode (7) left the right half an empty flat
+                                # field whenever the pose differed from the reference (Phase 0 on test art).
+                                control_image=[Image.fromarray(pose)], control_mode=[0],
+                                ip_adapter_image=ref_flat, width=width, height=size,
+                                num_inference_steps=STEPS, guidance_scale=GUIDANCE, strength=STRENGTH,
                                 controlnet_conditioning_scale=CONTROL_SCALE, generator=gen).images[0]
         except Exception as exc:  # noqa: BLE001
             if _is_oom(exc):

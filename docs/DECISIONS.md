@@ -77,6 +77,19 @@ Labels: **Owner** = chosen by the owner in this session. **Decided** = decided b
 | Moving the install | The app detects a moved DATA folder (venv `home` outside `DATA\python`) and re-creates the venv launcher offline with the bundled uv (§14). | Lesson from chargen. |
 | Line endings | CRLF for all text files; PowerShell scripts saved as UTF-8 with BOM. | §14 (owner's files use CRLF; PowerShell 5.1 and Vietnamese text). |
 
+## Drawing method (local finalisation, 2026-10-30) — Decided, verified on single frames
+
+- Phase 0 on temporary test art with the delivered method (each frame from noise; ControlNet pose + inpaint modes)
+  failed: whenever the pose differed from the reference, the right panel stayed an empty flat field; frames that did
+  come out drifted in outfit, line style and facing. Raising IP-Adapter (0.8, 1.0) lost the pose; descriptive tags
+  helped the outfit but not the pose.
+- Two changes, each tested on single frames: (1) ControlNet in **pose mode only** (dropping the inpaint mode is what
+  brought the character back); (2) each frame **starts from a rough repose** of the owner's own art
+  (`animgen/puppet.py`: parts cut by bone and moved onto the target skeleton; far limbs as darker copies) and the image
+  model repaints part of it (`STRENGTH` 0.6). Result: correct pose, the outfit and colours kept, a clean white
+  background. 0.45 left cut seams; 0.75 began to redraw the outfit.
+- Still open: a full 8-frame run, line weight (thinner than the reference), tuning. See HANDOFF.md.
+
 ## Owner notes (2026-10-30) — Confirmed
 
 - The app is for the owner's personal use only, not commercial. Licences are therefore not a selection criterion;

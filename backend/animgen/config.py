@@ -41,6 +41,7 @@ FRAME_MIN_FIGURE_FRACTION = 0.01
 # Edge cleaning after background removal (§6.5 step 4).
 ALPHA_FLOOR = 8                  # alpha at or below this becomes 0
 STRAY_REGION_FRACTION = 0.01     # detached specks smaller than this share of the figure are removed
+FIGURE_BOX_MARGIN = 0.15         # detached regions farther than this share of the skeleton's height are removed
 
 # Canvas fit (§6.5 step 5): grounded frames are moved so the feet stand on the foot line, if the drift is small.
 MAX_FOOT_SNAP_FRACTION = 0.06    # of the character height

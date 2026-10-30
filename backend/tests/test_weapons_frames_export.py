@@ -140,6 +140,17 @@ def test_clean_alpha_removes_specks():
     assert out[10, 10, 3] == 0 and out[100, 100, 3] == 0 and out[500, 500, 3] == 255
 
 
+def test_clean_alpha_removes_second_figure_away_from_skeleton():
+    arr = np.array(figure())
+    box = clean_alpha(Image.fromarray(arr, "RGBA")).getchannel("A").getbbox()
+    arr[box[1]:box[3], 900:1000] = (200, 120, 80, 255)   # a large second "figure" at the right edge
+    near = (box[0], box[1], box[2] - 1, box[3] - 1)
+    out = np.array(clean_alpha(Image.fromarray(arr, "RGBA"), near))
+    assert out[500, 950, 3] == 0 and out[500, 500, 3] == 255
+    kept = np.array(clean_alpha(Image.fromarray(arr, "RGBA"), (2000, 2000, 2100, 2100)))  # skeleton nowhere near
+    assert kept[500, 950, 3] == 255 and kept[500, 500, 3] == 255
+
+
 def test_fit_snaps_small_drift_only():
     img = figure()  # feet at row 899
     out, shift = fit_to_canvas(img, 905.0, 500.0, grounded=True)

@@ -276,7 +276,7 @@ class Session:
                 if exc.kind == "oom":
                     self.engine.free_memory()
                 continue
-            rgba = clean_alpha(rgba)
+            rgba = clean_alpha(rgba, slot.skeleton.bounds() if slot.skeleton else None)
             rgba, _shift = fit_to_canvas(rgba, ch.placement.anchor[1], ch.placement.figure_height, tf.grounded)
             check = validate_image(rgba, (config.CANVAS_SIZE, config.CANVAS_SIZE))
             if not check.ok:

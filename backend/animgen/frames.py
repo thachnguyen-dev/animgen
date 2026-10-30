@@ -55,8 +55,12 @@ def place_reference(ch: CharacterInput, mirror: bool, canvas: int = config.CANVA
     return Placement(out, scale, (anchor_x, foot_y), float(new_h), mirror)
 
 
-def clean_alpha(img: Image.Image) -> Image.Image:
-    """Edge cleaning after background removal: drop near-zero alpha and detached specks."""
+def clean_alpha(img: Image.Image, near: tuple[float, float, float, float] | None = None) -> Image.Image:
+    """Edge cleaning after background removal: drop near-zero alpha and detached specks.
+
+    ``near`` is the box where the figure should be (the target skeleton's bounds). Detached regions that do not reach
+    it, grown by ``config.FIGURE_BOX_MARGIN`` of its height, are removed too: a second figure or a prop the model drew
+    beside the character. Skipped when no region reaches the box, so a misplaced skeleton never empties the frame."""
     arr = np.array(img.convert("RGBA"))
     a = arr[..., 3]
     a[a <= config.ALPHA_FLOOR] = 0
@@ -66,9 +70,20 @@ def clean_alpha(img: Image.Image) -> Image.Image:
         if n > 2:
             areas = stats[1:, cv2.CC_STAT_AREA]
             keep_min = config.STRAY_REGION_FRACTION * float(areas.max())
-            for i, area in enumerate(areas, start=1):
-                if area < keep_min:
-                    a[labels == i] = 0
+            drop = {i for i, area in enumerate(areas, start=1) if area < keep_min}
+            if near is not None:
+                m = config.FIGURE_BOX_MARGIN * (near[3] - near[1])
+                x0, y0, x1, y1 = near[0] - m, near[1] - m, near[2] + m, near[3] + m
+                outside = set()
+                for i in range(1, n):
+                    l, t = stats[i, cv2.CC_STAT_LEFT], stats[i, cv2.CC_STAT_TOP]
+                    r, b = l + stats[i, cv2.CC_STAT_WIDTH], t + stats[i, cv2.CC_STAT_HEIGHT]
+                    if r < x0 or l > x1 or b < y0 or t > y1:
+                        outside.add(i)
+                if len(outside) < n - 1:
+                    drop |= outside
+            for i in drop:
+                a[labels == i] = 0
     arr[..., 3] = a
     arr[a == 0, :3] = 0
     return Image.fromarray(arr, mode="RGBA")
