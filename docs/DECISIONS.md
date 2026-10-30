@@ -76,6 +76,26 @@ Labels: **Owner** = chosen by the owner in this session. **Decided** = decided b
 | Moving the install | The app detects a moved DATA folder (venv `home` outside `DATA\python`) and re-creates the venv launcher offline with the bundled uv (§14). | Lesson from chargen. |
 | Line endings | CRLF for all text files; PowerShell scripts saved as UTF-8 with BOM. | §14 (owner's files use CRLF; PowerShell 5.1 and Vietnamese text). |
 
+## Character skeleton set by the owner (local finalisation, 2026-10-30)
+
+Owner's suggestion: let the user define the skeletons of the character and the weapons with stick figures, for when
+pose recognition is ineffective or too expensive. **Decided (changeable):**
+
+- Pose recognition runs only once per character, on the reference image; every frame's skeleton comes from the
+  motion template fitted to that skeleton's proportions. A wrong reference skeleton therefore spoils all frames,
+  while the cost is small (DWPose, about 350 MB, CPU, a second or two). The risk is accuracy on stylised art
+  (chibi, capes, heavy armour), not cost.
+- So the stick figure is set **in the app, on the character image**, not drawn as a separate image file: after
+  loading, the skeleton is shown over the character, pre-filled by DWPose (or by standard proportions when DWPose
+  is missing or finds nothing), and the owner drags any wrong joint and confirms. Separate stick-figure files
+  would need a strict drawing format and extra art work, and could not be checked against the character.
+- The confirmed skeleton is saved next to the character (by image content), so it is asked once per image.
+- Generation is refused until the skeleton is confirmed (one click when it is already right).
+- Weapons keep their two clicked points (grip, tip): that already is the weapon's stick figure; bows have them per
+  draw stage.
+- DWPose stays as the pre-fill. If Phase 0 shows it is wrong on most of the owner's art, it can be dropped and the
+  pre-fill comes from standard proportions alone.
+
 ## Not done on purpose
 
 - No free-form prompts, no batch generation, no automatic quality scoring, no Unity configuration files, no
