@@ -216,7 +216,7 @@ class SDXLDrawer:
         hands = "clenched hands, empty hands, " if req.hands_gripping else ""
         prompt = POSITIVE.format(motion=req.prompt or "standing", hands=hands,
                                  bg=BACKGROUND_WORDS.get(tuple(bg), "plain background"))
-        negative = NEGATIVE.format(weapon="weapon, holding weapon, sword, bow, staff, effects")
+        negative = NEGATIVE.format(weapon="weapon, holding weapon, holding, sword, dagger, knife, shield, bow, staff, effects")
         gen = torch.Generator(device="cpu").manual_seed(int(req.seed))
         try:
             with torch.inference_mode():

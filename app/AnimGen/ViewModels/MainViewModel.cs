@@ -102,6 +102,16 @@ public sealed class MainViewModel : ObservableObject
     private string _characterText = "Chưa chọn ảnh nhân vật.";
     public string CharacterText { get => _characterText; private set => Set(ref _characterText, value); }
 
+    private SkeletonInfo? _skeleton;
+    public SkeletonInfo? Skeleton { get => _skeleton; private set { if (Set(ref _skeleton, value)) { Raise(nameof(SkeletonText)); Raise(nameof(HasSkeleton)); Raise(nameof(CanGenerate)); } } }
+    public bool HasSkeleton => _skeleton != null;
+    public string SkeletonText => _skeleton == null ? "" : _skeleton.Confirmed
+        ? "Khung xương: đã xác nhận."
+        : "Khung xương: chưa xác nhận — bấm “Kiểm tra” trước khi tạo.";
+
+    /// <summary>Raised after a character loads with a skeleton the owner has not confirmed yet.</summary>
+    public event EventHandler? SkeletonCheckRequested;
+
     private string _facingText = "";
     public string FacingText { get => _facingText; private set => Set(ref _facingText, value); }
     private string _facing = "right";
@@ -210,7 +220,7 @@ public sealed class MainViewModel : ObservableObject
     public string FramesSummary { get => _framesSummary; private set => Set(ref _framesSummary, value); }
 
     public bool CanGenerate =>
-        Ready && !IsBusy && _characterPath != null && SelectedAnimation is { Ready: true }
+        Ready && !IsBusy && _characterPath != null && _skeleton is { Confirmed: true } && SelectedAnimation is { Ready: true }
         && (SelectedAnimation.Weapon != "required"
             || (SelectedWeapon?.Weapon != null && SelectedSkin is { Ready: true }))
         && (SelectedWeapon?.Weapon == null || SelectedSkin is { Ready: true });
@@ -355,10 +365,29 @@ public sealed class MainViewModel : ObservableObject
         {
             "detected" => $"Hướng: {dir} (tự nhận ra).",
             "owner" => $"Hướng: {dir} (bạn chọn).",
+            "saved" => $"Hướng: {dir} (đã lưu cùng khung xương).",
             _ => $"Hướng: {dir} (giả định — bấm “Đổi hướng” nếu sai).",
         };
+        Skeleton = c.Skeleton;
         if (r.State != null) ApplyState(r.State);
-        SetStatus(StatusKind.Ok, "Ảnh hợp lệ. Hãy chọn hoạt ảnh rồi bấm Tạo.");
+        CommandManager.InvalidateRequerySuggested();
+        if (c.Skeleton is { Confirmed: false })
+        {
+            SetStatus(StatusKind.Info, "Ảnh hợp lệ. Hãy kiểm tra khung xương của nhân vật.");
+            SkeletonCheckRequested?.Invoke(this, EventArgs.Empty);
+        }
+        else
+        {
+            SetStatus(StatusKind.Ok, "Ảnh hợp lệ. Hãy chọn hoạt ảnh rồi bấm Tạo.");
+        }
+    }
+
+    /// <summary>The skeleton dialog's reply: the confirmed skeleton, and the frames the backend dropped with the old one.</summary>
+    public void ApplySkeletonReply(CharacterReply r)
+    {
+        Skeleton = r.Character?.Skeleton;
+        if (r.State != null) ApplyState(r.State);
+        SetStatus(StatusKind.Ok, "Đã xác nhận khung xương. Hãy chọn hoạt ảnh rồi bấm Tạo.");
         CommandManager.InvalidateRequerySuggested();
     }
 

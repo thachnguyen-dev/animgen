@@ -44,6 +44,9 @@ public sealed class BackendClient : IDisposable
     public Task<CharacterReply> SetCharacterAsync(string path, string? facing, string? name) =>
         PostAsync<CharacterReply>("character", new { path, facing, name });
 
+    public Task<CharacterReply> ConfirmSkeletonAsync(IEnumerable<double[]?> points) =>
+        PostAsync<CharacterReply>("character/skeleton", new { points = points.ToArray() });
+
     public Task<WeaponInfo> AddWeaponAsync(string name, string kind, string skin, IEnumerable<string> images) =>
         PostAsync<WeaponInfo>("weapons", new { name, kind, skin, images = images.ToArray() });
 

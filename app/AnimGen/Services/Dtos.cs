@@ -53,8 +53,20 @@ public sealed class CharacterInfo
     public int Height { get; set; }
     public int FigureHeight { get; set; }
     public string Facing { get; set; } = "right";
-    public string FacingSource { get; set; } = "assumed";   // detected | assumed | owner
+    public string FacingSource { get; set; } = "assumed";   // detected | assumed | owner | saved
     public string Name { get; set; } = "";
+    public SkeletonInfo? Skeleton { get; set; }
+}
+
+/// <summary>The character's skeleton on <see cref="Image"/> (the character's own facing), 18 OpenPose points in
+/// image pixels; a missing joint is null.</summary>
+public sealed class SkeletonInfo
+{
+    public string? Image { get; set; }
+    public int Size { get; set; }
+    public List<double[]?> Points { get; set; } = new();
+    public string Source { get; set; } = "detected";       // detected | proportions | saved
+    public bool Confirmed { get; set; }
 }
 
 public sealed class CharacterReply

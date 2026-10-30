@@ -151,6 +151,11 @@
                                 <Button DockPanel.Dock="Right" Content="Đổi hướng" Command="{Binding FlipFacingCommand}" Padding="8,4"/>
                                 <TextBlock Text="{Binding FacingText}" Style="{StaticResource TextMuted}" VerticalAlignment="Center"/>
                             </DockPanel>
+                            <DockPanel Visibility="{Binding HasSkeleton, Converter={StaticResource BoolToVis}}">
+                                <Button DockPanel.Dock="Right" Content="Kiểm tra" Click="CheckSkeleton_Click" Padding="8,4"
+                                        AutomationProperties.Name="Kiểm tra khung xương"/>
+                                <TextBlock Text="{Binding SkeletonText}" Style="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                            </DockPanel>
                             <TextBlock Style="{StaticResource TextMuted}"
                                        Text="Ảnh cần: một nhân vật, toàn thân, đứng, nhìn ngang, nền trong suốt thật, không cầm vũ khí."/>
                         </StackPanel>
