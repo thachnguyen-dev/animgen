@@ -1,0 +1,6 @@
+# Enough to run the backend with --engine demo and the test suite (no GPU, no models).
+numpy>=1.26,<3
+pillow>=10.4
+opencv-python-headless>=4.10
+onnxruntime>=1.22
+pytest>=8

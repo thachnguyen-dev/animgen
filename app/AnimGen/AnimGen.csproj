@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>AnimGen</AssemblyName>
+    <RootNamespace>AnimGen</RootNamespace>
+    <Version>0.1.0</Version>
+    <!-- Allows a compile check of the WPF project from a non-Windows machine; the app itself runs on Windows only. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- No NuGet packages: the app builds and runs offline with the .NET SDK alone. -->
+    <SatelliteResourceLanguages>vi</SatelliteResourceLanguages>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+</Project>

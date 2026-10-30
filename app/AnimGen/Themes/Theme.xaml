@@ -1,0 +1,205 @@
+<!--
+  The one place for the app's shared values (§11.4, Proposed): a light neutral palette with one accent colour,
+  Segoe UI, spacing on a base of 4. Pages take every colour, size and spacing from here; no literals in pages.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- Colours -->
+    <Color x:Key="ColorWindow">#F5F5F4</Color>
+    <Color x:Key="ColorSurface">#FFFFFF</Color>
+    <Color x:Key="ColorBorder">#D6D3D1</Color>
+    <Color x:Key="ColorText">#1C1917</Color>
+    <Color x:Key="ColorTextMuted">#57534E</Color>
+    <Color x:Key="ColorAccent">#2563EB</Color>
+    <Color x:Key="ColorAccentHover">#1D4ED8</Color>
+    <Color x:Key="ColorAccentSoft">#DBEAFE</Color>
+    <Color x:Key="ColorSuccess">#15803D</Color>
+    <Color x:Key="ColorSuccessSoft">#DCFCE7</Color>
+    <Color x:Key="ColorError">#B91C1C</Color>
+    <Color x:Key="ColorErrorSoft">#FEE2E2</Color>
+    <Color x:Key="ColorWarning">#A16207</Color>
+    <Color x:Key="ColorWarningSoft">#FEF3C7</Color>
+    <Color x:Key="ColorCheckerLight">#FFFFFF</Color>
+    <Color x:Key="ColorCheckerDark">#E7E5E4</Color>
+
+    <SolidColorBrush x:Key="BrushWindow" Color="{StaticResource ColorWindow}"/>
+    <SolidColorBrush x:Key="BrushSurface" Color="{StaticResource ColorSurface}"/>
+    <SolidColorBrush x:Key="BrushBorder" Color="{StaticResource ColorBorder}"/>
+    <SolidColorBrush x:Key="BrushText" Color="{StaticResource ColorText}"/>
+    <SolidColorBrush x:Key="BrushTextMuted" Color="{StaticResource ColorTextMuted}"/>
+    <SolidColorBrush x:Key="BrushAccent" Color="{StaticResource ColorAccent}"/>
+    <SolidColorBrush x:Key="BrushAccentHover" Color="{StaticResource ColorAccentHover}"/>
+    <SolidColorBrush x:Key="BrushAccentSoft" Color="{StaticResource ColorAccentSoft}"/>
+    <SolidColorBrush x:Key="BrushSuccess" Color="{StaticResource ColorSuccess}"/>
+    <SolidColorBrush x:Key="BrushSuccessSoft" Color="{StaticResource ColorSuccessSoft}"/>
+    <SolidColorBrush x:Key="BrushError" Color="{StaticResource ColorError}"/>
+    <SolidColorBrush x:Key="BrushErrorSoft" Color="{StaticResource ColorErrorSoft}"/>
+    <SolidColorBrush x:Key="BrushWarning" Color="{StaticResource ColorWarning}"/>
+    <SolidColorBrush x:Key="BrushWarningSoft" Color="{StaticResource ColorWarningSoft}"/>
+
+    <!-- Checkerboard shown behind transparency in previews; never part of an image -->
+    <DrawingBrush x:Key="BrushChecker" TileMode="Tile" Viewport="0,0,16,16" ViewportUnits="Absolute">
+        <DrawingBrush.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Geometry="M0,0 L16,0 16,16 0,16Z">
+                    <GeometryDrawing.Brush>
+                        <SolidColorBrush Color="{StaticResource ColorCheckerLight}"/>
+                    </GeometryDrawing.Brush>
+                </GeometryDrawing>
+                <GeometryDrawing Geometry="M0,0 L8,0 8,8 0,8Z M8,8 L16,8 16,16 8,16Z">
+                    <GeometryDrawing.Brush>
+                        <SolidColorBrush Color="{StaticResource ColorCheckerDark}"/>
+                    </GeometryDrawing.Brush>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingBrush.Drawing>
+    </DrawingBrush>
+
+    <!-- Type -->
+    <FontFamily x:Key="FontUi">Segoe UI</FontFamily>
+    <FontFamily x:Key="FontIcons">Segoe MDL2 Assets</FontFamily>
+    <sys:Double x:Key="FontSizeBody">14</sys:Double>
+    <sys:Double x:Key="FontSizeSmall">12</sys:Double>
+    <sys:Double x:Key="FontSizeTitle">16</sys:Double>
+    <sys:Double x:Key="FontSizeIcon">16</sys:Double>
+
+    <!-- Spacing (base 4) and shapes -->
+    <Thickness x:Key="SpaceGap">0,0,0,8</Thickness>
+    <Thickness x:Key="SpaceSection">0,0,0,16</Thickness>
+    <Thickness x:Key="PaddingPanel">16</Thickness>
+    <Thickness x:Key="PaddingButton">16,8</Thickness>
+    <Thickness x:Key="PaddingBanner">12,8</Thickness>
+    <Thickness x:Key="SpaceRight">0,0,8,0</Thickness>
+    <CornerRadius x:Key="Radius">4</CornerRadius>
+    <sys:Double x:Key="SizeThumb">160</sys:Double>
+    <sys:Double x:Key="SizeStripCell">96</sys:Double>
+    <GridLength x:Key="WidthLeftPanel">340</GridLength>
+
+    <!-- Icon glyphs (Segoe MDL2 Assets). Status is always icon + text, never colour alone (§11.1). -->
+    <sys:String x:Key="GlyphInfo">&#xE946;</sys:String>
+    <sys:String x:Key="GlyphOk">&#xE930;</sys:String>
+    <sys:String x:Key="GlyphError">&#xEA39;</sys:String>
+    <sys:String x:Key="GlyphBusy">&#xE895;</sys:String>
+    <sys:String x:Key="GlyphWarning">&#xE7BA;</sys:String>
+    <sys:String x:Key="GlyphPlay">&#xE768;</sys:String>
+    <sys:String x:Key="GlyphPause">&#xE769;</sys:String>
+    <sys:String x:Key="GlyphGenerate">&#xE768;</sys:String>
+    <sys:String x:Key="GlyphRegenerate">&#xE72C;</sys:String>
+    <sys:String x:Key="GlyphExport">&#xEDE1;</sys:String>
+    <sys:String x:Key="GlyphFolder">&#xE8B7;</sys:String>
+
+    <!-- Base text -->
+    <Style TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontUi}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}"/>
+        <!-- No Foreground here: text inherits it, so text inside filled buttons stays light. -->
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style x:Key="TextTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeTitle}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Margin" Value="{StaticResource SpaceGap}"/>
+    </Style>
+    <Style x:Key="TextMuted" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeSmall}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushTextMuted}"/>
+    </Style>
+    <Style x:Key="TextIcon" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontIcons}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSizeIcon}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Margin" Value="{StaticResource SpaceRight}"/>
+    </Style>
+
+    <Style x:Key="Panel" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource BrushSurface}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrushBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource Radius}"/>
+        <Setter Property="Padding" Value="{StaticResource PaddingPanel}"/>
+        <Setter Property="Margin" Value="{StaticResource SpaceSection}"/>
+    </Style>
+
+    <Style TargetType="ComboBox">
+        <Setter Property="FontFamily" Value="{StaticResource FontUi}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}"/>
+        <Setter Property="Margin" Value="{StaticResource SpaceGap}"/>
+        <Setter Property="Padding" Value="8,4"/>
+    </Style>
+    <Style TargetType="TextBox">
+        <Setter Property="FontFamily" Value="{StaticResource FontUi}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}"/>
+        <Setter Property="Margin" Value="{StaticResource SpaceGap}"/>
+        <Setter Property="Padding" Value="4"/>
+    </Style>
+    <Style TargetType="CheckBox">
+        <Setter Property="FontFamily" Value="{StaticResource FontUi}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}"/>
+        <Setter Property="Margin" Value="{StaticResource SpaceGap}"/>
+    </Style>
+    <Style TargetType="ProgressBar">
+        <Setter Property="Height" Value="8"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushAccent}"/>
+        <Setter Property="Margin" Value="{StaticResource SpaceGap}"/>
+    </Style>
+
+    <!-- Buttons: three visibly different kinds (§11.1: generate, regenerate and export are distinct) -->
+    <Style x:Key="ButtonBase" TargetType="Button">
+        <Setter Property="FontFamily" Value="{StaticResource FontUi}"/>
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBody}"/>
+        <Setter Property="Padding" Value="{StaticResource PaddingButton}"/>
+        <Setter Property="Margin" Value="{StaticResource SpaceGap}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Background" Value="{StaticResource BrushSurface}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrushBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource Radius}" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                            <Setter TargetName="Bd" Property="BorderThickness" Value="2"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            <Setter Property="Cursor" Value="Arrow"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="Button" BasedOn="{StaticResource ButtonBase}"/>
+    <!-- Generate: filled accent -->
+    <Style x:Key="ButtonPrimary" TargetType="Button" BasedOn="{StaticResource ButtonBase}">
+        <Setter Property="Background" Value="{StaticResource BrushAccent}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushSurface}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <!-- Regenerate: accent outline on a soft fill -->
+    <Style x:Key="ButtonRegenerate" TargetType="Button" BasedOn="{StaticResource ButtonBase}">
+        <Setter Property="Background" Value="{StaticResource BrushAccentSoft}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushAccentHover}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+    </Style>
+    <!-- Export: filled success colour -->
+    <Style x:Key="ButtonExport" TargetType="Button" BasedOn="{StaticResource ButtonBase}">
+        <Setter Property="Background" Value="{StaticResource BrushSuccess}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushSurface}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrushSuccess}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+</ResourceDictionary>

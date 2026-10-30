@@ -1,0 +1,17 @@
+# Runtime of the real engine on the owner's PC (Windows, CUDA 12.6). Versions follow chargen (§14, Inherited—Verify).
+# Installed by scripts/setup_runtime.ps1 with:  --index-url https://download.pytorch.org/whl/cu126  for torch.
+torch==2.7.1
+diffusers==0.35.1
+transformers==4.56.1
+accelerate>=1.6,<2
+safetensors>=0.4.5
+onnxruntime==1.22.1
+numpy>=1.26,<3
+pillow>=10.4
+opencv-python-headless>=4.10
+# BiRefNet's model code (loaded from the local model folder) imports these:
+timm>=1.0.9
+einops>=0.8
+kornia>=0.7
+# Only for scripts/download_models.py (installation time, with internet):
+huggingface_hub>=0.34

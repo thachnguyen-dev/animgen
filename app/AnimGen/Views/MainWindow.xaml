@@ -1,0 +1,375 @@
+<Window x:Class="AnimGen.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:AnimGen.ViewModels"
+        Title="Tạo hoạt ảnh 2D"
+        Width="1280" Height="840" MinWidth="1000" MinHeight="680"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BrushWindow}" Foreground="{StaticResource BrushText}"
+        FontFamily="{StaticResource FontUi}" FontSize="{StaticResource FontSizeBody}"
+        d:DataContext="{d:DesignInstance vm:MainViewModel}"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Status line: icon + text + colour together; never colour alone (§11.1) -->
+        <Style x:Key="StatusBorder" TargetType="Border">
+            <Setter Property="CornerRadius" Value="{StaticResource Radius}"/>
+            <Setter Property="Padding" Value="{StaticResource PaddingBanner}"/>
+            <Setter Property="Margin" Value="{StaticResource SpaceSection}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Background" Value="{StaticResource BrushSurface}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BrushBorder}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding StatusKind}" Value="Ok">
+                    <Setter Property="Background" Value="{StaticResource BrushSuccessSoft}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource BrushSuccess}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="Warning">
+                    <Setter Property="Background" Value="{StaticResource BrushWarningSoft}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource BrushWarning}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="Error">
+                    <Setter Property="Background" Value="{StaticResource BrushErrorSoft}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource BrushError}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="Busy">
+                    <Setter Property="Background" Value="{StaticResource BrushAccentSoft}"/>
+                    <Setter Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="StatusGlyph" TargetType="TextBlock" BasedOn="{StaticResource TextIcon}">
+            <Setter Property="Text" Value="{StaticResource GlyphInfo}"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding StatusKind}" Value="Ok">
+                    <Setter Property="Text" Value="{StaticResource GlyphOk}"/>
+                    <Setter Property="Foreground" Value="{StaticResource BrushSuccess}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="Warning">
+                    <Setter Property="Text" Value="{StaticResource GlyphWarning}"/>
+                    <Setter Property="Foreground" Value="{StaticResource BrushWarning}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="Error">
+                    <Setter Property="Text" Value="{StaticResource GlyphError}"/>
+                    <Setter Property="Foreground" Value="{StaticResource BrushError}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding StatusKind}" Value="Busy">
+                    <Setter Property="Text" Value="{StaticResource GlyphBusy}"/>
+                    <Setter Property="Foreground" Value="{StaticResource BrushAccent}"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- One cell of the 8-frame strip -->
+        <DataTemplate x:Key="FrameCell" DataType="{x:Type vm:FrameItem}">
+            <Button Command="{Binding DataContext.SelectFrameCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                    CommandParameter="{Binding}" Padding="4" Margin="{StaticResource SpaceRight}"
+                    AutomationProperties.Name="{Binding Label}">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource ButtonBase}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                                <Setter Property="BorderThickness" Value="3"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+                <StackPanel Width="{StaticResource SizeStripCell}">
+                    <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeStripCell}">
+                        <Image Source="{Binding Image}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Border>
+                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock>
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource TextIcon}">
+                                    <Setter Property="Text" Value=""/>
+                                    <Setter Property="FontSize" Value="{StaticResource FontSizeSmall}"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsOk}" Value="True">
+                                            <Setter Property="Text" Value="{StaticResource GlyphOk}"/>
+                                            <Setter Property="Foreground" Value="{StaticResource BrushSuccess}"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding IsFailed}" Value="True">
+                                            <Setter Property="Text" Value="{StaticResource GlyphError}"/>
+                                            <Setter Property="Foreground" Value="{StaticResource BrushError}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Text="{Binding StatusText}" Style="{StaticResource TextMuted}"/>
+                    </StackPanel>
+                    <TextBlock Text="Có bản mới" Style="{StaticResource TextMuted}" FontWeight="SemiBold"
+                               Foreground="{StaticResource BrushAccentHover}"
+                               Visibility="{Binding HasCandidate, Converter={StaticResource BoolToVis}}"/>
+                    <TextBlock Text="Vũ khí bị cắt" Style="{StaticResource TextMuted}"
+                               Foreground="{StaticResource BrushWarning}"
+                               Visibility="{Binding WeaponClipped, Converter={StaticResource BoolToVis}}"/>
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Demo engine banner: its frames are not AI output -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource BrushWarningSoft}" BorderBrush="{StaticResource BrushWarning}"
+                BorderThickness="0,0,0,1" Padding="{StaticResource PaddingBanner}"
+                Visibility="{Binding IsDemo, Converter={StaticResource BoolToVis}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Style="{StaticResource TextIcon}" Text="{StaticResource GlyphWarning}" Foreground="{StaticResource BrushWarning}"/>
+                <TextBlock Text="Chế độ thử: không dùng AI. Khung hình chỉ là hình minh hoạ để kiểm tra các bước, không phải kết quả thật."
+                           FontWeight="SemiBold"/>
+            </StackPanel>
+        </Border>
+
+        <Grid Margin="{StaticResource PaddingPanel}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="{StaticResource WidthLeftPanel}"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: steps 1–4 -->
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Style="{StaticResource Panel}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource TextTitle}" Text="1. Nhân vật"/>
+                            <Button Content="Chọn ảnh nhân vật…" Command="{Binding ChooseCharacterCommand}" HorizontalAlignment="Left"/>
+                            <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeThumb}"
+                                    BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}">
+                                <Image Source="{Binding CharacterImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+                            </Border>
+                            <TextBlock Text="{Binding CharacterText}" Style="{StaticResource TextMuted}" Margin="{StaticResource SpaceGap}"/>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="Đổi hướng" Command="{Binding FlipFacingCommand}" Padding="8,4"/>
+                                <TextBlock Text="{Binding FacingText}" Style="{StaticResource TextMuted}" VerticalAlignment="Center"/>
+                            </DockPanel>
+                            <TextBlock Style="{StaticResource TextMuted}"
+                                       Text="Ảnh cần: một nhân vật, toàn thân, đứng, nhìn ngang, nền trong suốt thật, không cầm vũ khí."/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Panel}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource TextTitle}" Text="2. Hoạt ảnh"/>
+                            <ComboBox ItemsSource="{Binding Animations}" SelectedItem="{Binding SelectedAnimation}"
+                                      AutomationProperties.Name="Hoạt ảnh">
+                                <ComboBox.ItemContainerStyle>
+                                    <Style TargetType="ComboBoxItem">
+                                        <Setter Property="IsEnabled" Value="{Binding Ready}"/>
+                                    </Style>
+                                </ComboBox.ItemContainerStyle>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding NameVi}"/>
+                                            <TextBlock Text=" (chưa có)" Style="{StaticResource TextMuted}">
+                                                <TextBlock.Visibility>
+                                                    <Binding Path="Ready">
+                                                        <Binding.Converter>
+                                                            <vm:InverseBoolToVisibility/>
+                                                        </Binding.Converter>
+                                                    </Binding>
+                                                </TextBlock.Visibility>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Text="{Binding AnimationNote}" Style="{StaticResource TextMuted}" Margin="{StaticResource SpaceGap}"/>
+
+                            <StackPanel Visibility="{Binding ShowWeapon, Converter={StaticResource BoolToVis}}">
+                                <TextBlock Text="Vũ khí" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding WeaponOptions}" SelectedItem="{Binding SelectedWeapon}"
+                                          AutomationProperties.Name="Vũ khí"/>
+                                <TextBlock Text="Màu (skin)" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding Skins}" SelectedItem="{Binding SelectedSkin}"
+                                          DisplayMemberPath="Name" AutomationProperties.Name="Màu vũ khí"/>
+                                <Button Content="Thêm vũ khí hoặc màu…" Click="AddWeapon_Click" HorizontalAlignment="Left"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Panel}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource TextTitle}" Text="3. Tạo"/>
+                            <Button Style="{StaticResource ButtonPrimary}" Command="{Binding GenerateCommand}" HorizontalAlignment="Stretch">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource TextIcon}" Text="{StaticResource GlyphGenerate}" Foreground="{StaticResource BrushSurface}"/>
+                                    <TextBlock Text="Tạo hoạt ảnh (8 khung)" Foreground="{StaticResource BrushSurface}" FontWeight="SemiBold"/>
+                                </StackPanel>
+                            </Button>
+                            <StackPanel Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}">
+                                <ProgressBar Maximum="{Binding ProgressMax}" Value="{Binding ProgressValue}"/>
+                                <TextBlock Text="{Binding ProgressText}" Margin="{StaticResource SpaceGap}"/>
+                                <Button Content="Huỷ" Command="{Binding CancelCommand}" HorizontalAlignment="Left"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Panel}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource TextTitle}" Text="4. Xuất"/>
+                            <TextBlock Text="Chiều cao khung (px)" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                            <ComboBox ItemsSource="{Binding ExportHeights}" SelectedItem="{Binding ExportHeight}"
+                                      AutomationProperties.Name="Chiều cao khung"/>
+                            <TextBlock Text="Thư mục" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                            <DockPanel Margin="{StaticResource SpaceGap}">
+                                <Button DockPanel.Dock="Right" Content="Chọn…" Command="{Binding BrowseExportCommand}" Padding="8,4" Margin="8,0,0,0"/>
+                                <TextBox Text="{Binding ExportFolder, UpdateSourceTrigger=PropertyChanged}" Margin="0"
+                                         AutomationProperties.Name="Thư mục xuất"/>
+                            </DockPanel>
+                            <Button Style="{StaticResource ButtonExport}" Command="{Binding ExportCommand}" HorizontalAlignment="Stretch">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource TextIcon}" Text="{StaticResource GlyphExport}" Foreground="{StaticResource BrushSurface}"/>
+                                    <TextBlock Text="Xuất PNG và sprite sheet" Foreground="{StaticResource BrushSurface}" FontWeight="SemiBold"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding OpenExportFolderCommand}" HorizontalAlignment="Left" Padding="8,4">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Style="{StaticResource TextIcon}" Text="{StaticResource GlyphFolder}"/>
+                                    <TextBlock Text="Mở thư mục xuất"/>
+                                </StackPanel>
+                            </Button>
+                            <TextBlock Style="{StaticResource TextMuted}"
+                                       Text="Sprite sheet: 1 hàng × 8 khung, không khoảng cách. Trong Unity: Sprite Mode = Multiple, Slice → Grid By Cell Count, 1 × 8."/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Right: status, preview, compare, frame strip -->
+            <DockPanel Grid.Column="2">
+                <Border DockPanel.Dock="Top" Style="{StaticResource StatusBorder}">
+                    <DockPanel>
+                        <TextBlock Style="{StaticResource StatusGlyph}"/>
+                        <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center"
+                                   AutomationProperties.LiveSetting="Polite"/>
+                    </DockPanel>
+                </Border>
+
+                <!-- Frame strip -->
+                <Border DockPanel.Dock="Bottom" Style="{StaticResource Panel}" Margin="0">
+                    <StackPanel>
+                        <DockPanel Margin="{StaticResource SpaceGap}">
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Style="{StaticResource ButtonRegenerate}" Command="{Binding RegenerateFrameCommand}" Margin="{StaticResource SpaceRight}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource TextIcon}" Text="{StaticResource GlyphRegenerate}" Foreground="{StaticResource BrushAccentHover}"/>
+                                        <TextBlock Text="Tạo lại khung này" Foreground="{StaticResource BrushAccentHover}"/>
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource ButtonRegenerate}" Command="{Binding RegenerateAllCommand}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Style="{StaticResource TextIcon}" Text="{StaticResource GlyphRegenerate}" Foreground="{StaticResource BrushAccentHover}"/>
+                                        <TextBlock Text="Tạo lại cả 8 khung" Foreground="{StaticResource BrushAccentHover}"/>
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                            <TextBlock Text="{Binding FramesSummary}" VerticalAlignment="Center"/>
+                        </DockPanel>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding Frames}" ItemTemplate="{StaticResource FrameCell}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </ScrollViewer>
+                        <Button Content="Dùng tất cả bản mới" Command="{Binding AcceptAllCommand}" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Compare a regenerated frame with the current one (§8.3) -->
+                <Border DockPanel.Dock="Right" Style="{StaticResource Panel}" Width="300" Margin="16,0,0,16"
+                        Visibility="{Binding ShowCompare, Converter={StaticResource BoolToVis}}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource TextTitle}">
+                            <Run Text="So sánh "/><Run Text="{Binding SelectedFrame.Label, Mode=OneWay}"/>
+                        </TextBlock>
+                        <StackPanel DockPanel.Dock="Bottom">
+                            <Button Style="{StaticResource ButtonPrimary}" Content="Dùng bản mới" Command="{Binding AcceptCommand}" HorizontalAlignment="Stretch"/>
+                            <Button Content="Giữ bản cũ" Command="{Binding KeepCommand}" HorizontalAlignment="Stretch"/>
+                        </StackPanel>
+                        <UniformGrid Rows="2">
+                            <DockPanel Margin="{StaticResource SpaceGap}">
+                                <TextBlock DockPanel.Dock="Top" Text="Hiện tại" FontWeight="SemiBold"/>
+                                <Border Background="{StaticResource BrushChecker}">
+                                    <Image Source="{Binding SelectedFrame.Image}" Stretch="Uniform"/>
+                                </Border>
+                            </DockPanel>
+                            <DockPanel Margin="{StaticResource SpaceGap}">
+                                <TextBlock DockPanel.Dock="Top" Text="Bản mới" FontWeight="SemiBold"/>
+                                <Grid>
+                                    <Border Background="{StaticResource BrushChecker}">
+                                        <Image Source="{Binding SelectedFrame.Candidate}" Stretch="Uniform"/>
+                                    </Border>
+                                    <Border Background="{StaticResource BrushErrorSoft}" Padding="8"
+                                            Visibility="{Binding SelectedFrame.CandidateFailed, Converter={StaticResource BoolToVis}}">
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource TextIcon}" Text="{StaticResource GlyphError}" Foreground="{StaticResource BrushError}"/>
+                                            <TextBlock Text="Bản mới bị lỗi. Khung hiện tại được giữ nguyên."/>
+                                            <TextBlock Text="{Binding SelectedFrame.ErrorText}" Style="{StaticResource TextMuted}"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </DockPanel>
+                        </UniformGrid>
+                    </DockPanel>
+                </Border>
+
+                <!-- Preview -->
+                <Border Style="{StaticResource Panel}" Margin="0,0,0,16">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Command="{Binding PlayPauseCommand}" Padding="8,4" Margin="{StaticResource SpaceRight}"
+                                    AutomationProperties.Name="Phát hoặc dừng">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource TextIcon}">
+                                                <Setter Property="Text" Value="{StaticResource GlyphPlay}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                                        <Setter Property="Text" Value="{StaticResource GlyphPause}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                                <Setter Property="Text" Value="Phát"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsPlaying}" Value="True">
+                                                        <Setter Property="Text" Value="Dừng"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Button>
+                            <TextBlock Text="Tốc độ" VerticalAlignment="Center" Margin="{StaticResource SpaceRight}"/>
+                            <ComboBox ItemsSource="{Binding FpsChoices}" SelectedItem="{Binding Fps}" Width="72" Margin="0"
+                                      AutomationProperties.Name="Tốc độ phát (khung/giây)"/>
+                            <TextBlock Text="khung/giây" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </StackPanel>
+                        <Border Background="{StaticResource BrushChecker}" BorderBrush="{StaticResource BrushBorder}" BorderThickness="1">
+                            <Image Source="{Binding PreviewImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+                        </Border>
+                    </DockPanel>
+                </Border>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</Window>
