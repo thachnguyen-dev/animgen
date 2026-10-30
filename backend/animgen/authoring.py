@@ -113,6 +113,28 @@ def w(hand: str, angle: float, layer: str = "front", stage: int = 1) -> dict:
     return {"hand": hand, "angle": angle, "layer": layer, "stage": stage}
 
 
+def reach(x: float, y: float, elbow: str = "down") -> tuple[float, float]:
+    """Shoulder and elbow angles that put the wrist at (x, y) from the shoulder (x forward, y down, template
+    units). ``elbow``: "down" puts the elbow below the shoulder-wrist line, "back" behind it (a drawn bow)."""
+    d = min(math.hypot(x, y), UPPER_ARM + FOREARM - 1e-6)
+    to = math.atan2(x, y)                                       # direction to the wrist, as limb angles are measured
+    bend = math.acos((UPPER_ARM ** 2 + d ** 2 - FOREARM ** 2) / (2 * UPPER_ARM * d))
+    options = []
+    for sign in (1, -1):
+        up = to + sign * bend
+        ex, ey = math.sin(up) * UPPER_ARM, math.cos(up) * UPPER_ARM
+        fore = math.atan2(x - ex, y - ey)
+        options.append((ex, ey, math.degrees(up), math.degrees(fore)))
+    ex, ey, up, fore = min(options, key=lambda o: o[0]) if elbow == "back" else max(options, key=lambda o: o[1])
+    el = (fore - up + 180.0) % 360.0 - 180.0
+    return round(up, 1), round(el, 1)
+
+
+def _near(x: float, y: float, elbow: str = "down") -> dict:
+    sh, el = reach(x, y, elbow)
+    return {"r_sh": sh, "r_el": el}
+
+
 # ------------------------------------------------------------------------------------------------------------
 # Templates. Cyclic ones (idle, walk, run) are written so that frame 8 leads back into frame 1.
 # ------------------------------------------------------------------------------------------------------------
@@ -207,32 +229,44 @@ def a2() -> list[Pose]:
 
 
 def a5() -> list[Pose]:
-    """Bow in the far (left) hand, string drawn by the near hand. Stages: 1 resting, 2 half, 3 full."""
+    """Bow in the far (left) hand, string drawn by the near hand. Stages: 1 resting, 2 half, 3 full.
+    The shot cycle of archery guides and photos (owner, 2026-10-31: the old draw pushed both arms forward): bow
+    low; set-up; bow arm straight forward at shoulder height; the draw hand pulls back along the arrow to the jaw
+    with the elbow going back, level with the arrow; hold; release, the hand sliding back past the ear, fingers
+    relaxed; follow-through with the bow arm still up."""
     st = dict(r_hip=16, r_knee=8, l_hip=-14, l_knee=6)
+    aim = dict(l_sh=95, l_el=0)                       # bow hand about 0.29 ahead of the near shoulder, 0.03 up
     return [
-        Pose(spine=2, head=2, l_sh=25, l_el=15, r_sh=10, r_el=20, **st, weapon=w("l", -70, "behind", 1)),
-        Pose(spine=2, head=0, l_sh=60, l_el=10, r_sh=40, r_el=60, **st, weapon=w("l", -80, "behind", 1)),
-        Pose(spine=0, head=0, l_sh=88, l_el=2, r_sh=80, r_el=40, **st, weapon=w("l", -90, "behind", 1)),
-        Pose(spine=-2, head=0, l_sh=90, l_el=0, r_sh=82, r_el=110, **st, weapon=w("l", -90, "behind", 2)),
-        Pose(spine=-4, head=0, l_sh=90, l_el=0, r_sh=78, r_el=150, **st, weapon=w("l", -90, "behind", 3)),
-        Pose(spine=-4, head=0, l_sh=90, l_el=0, r_sh=78, r_el=152, **st, weapon=w("l", -90, "behind", 3)),
-        Pose(spine=-3, head=0, l_sh=90, l_el=0, r_sh=45, r_el=120, **st, weapon=w("l", -88, "behind", 1)),
-        Pose(spine=0, head=0, l_sh=85, l_el=4, r_sh=25, r_el=80, **st, weapon=w("l", -85, "behind", 1)),
+        Pose(spine=2, head=2, l_sh=25, l_el=15, **_near(0.10, 0.20), **st, weapon=w("l", -70, "behind", 1)),  # rest
+        Pose(spine=1, head=1, l_sh=60, l_el=10, **_near(0.18, 0.08), **st, weapon=w("l", -82, "behind", 1)),  # set-up
+        Pose(spine=0, head=1, **aim, **_near(0.24, -0.035), **st, weapon=w("l", -90, "behind", 1)),  # pre-draw
+        Pose(spine=-1, head=2, **aim, **_near(0.10, -0.05), **st, weapon=w("l", -90, "behind", 2)),  # draw: elbow still low in front
+        # (a flat side view cannot show the elbow swinging out toward the viewer on its way back)
+        Pose(spine=-2, head=3, **aim, **_near(0.02, -0.07, "back"), **st, weapon=w("l", -90, "behind", 3)),  # anchor
+        Pose(spine=-2, head=3, **aim, **_near(0.015, -0.07, "back"), **st, weapon=w("l", -90, "behind", 3)),  # aim
+        Pose(spine=-2, head=2, **aim, **_near(-0.06, -0.06, "back"), **st, weapon=w("l", -90, "behind", 1),
+             open=("r",)),                                                                               # release
+        Pose(spine=-1, head=1, l_sh=88, l_el=2, **_near(-0.05, 0.03, "back"), **st,
+             weapon=w("l", -88, "behind", 1), open=("r",)),                                              # follow
     ]
 
 
 def a6() -> list[Pose]:
-    """Magic staff in the near hand: raise, gather, cast forward."""
+    """Magic staff in the near hand (owner, 2026-10-31): the staff is raised forward to about 40 degrees above
+    the horizontal, held there, then brought back to where it started."""
     st = dict(r_hip=14, r_knee=8, l_hip=-12, l_knee=6)
+    far = dict(l_sh=-5, l_el=20)
+    rest = dict(r_sh=20, r_el=60)
+    up = dict(r_sh=75, r_el=15)                       # arm forward, forearm level
     return [
-        Pose(spine=3, head=2, r_sh=20, r_el=60, l_sh=-5, l_el=20, **st, weapon=w("r", -88)),
-        Pose(spine=0, head=-2, r_sh=70, r_el=55, l_sh=20, l_el=60, **st, weapon=w("r", -95)),
-        Pose(spine=-4, head=-6, r_sh=140, r_el=30, l_sh=60, l_el=70, **st, weapon=w("r", -100)),
-        Pose(spine=-6, head=-8, r_sh=165, r_el=15, l_sh=120, l_el=40, dx=-0.01, **st, weapon=w("r", -95)),
-        Pose(spine=-6, head=-8, r_sh=168, r_el=12, l_sh=125, l_el=35, dx=-0.01, **st, weapon=w("r", -95)),
-        Pose(spine=8, head=4, r_sh=125, r_el=10, l_sh=60, l_el=50, dx=0.01, **st, weapon=w("r", -45)),
-        Pose(spine=14, head=6, r_sh=95, r_el=2, l_sh=30, l_el=60, dx=0.025, **st, weapon=w("r", -10)),
-        Pose(spine=6, head=3, r_sh=40, r_el=50, l_sh=0, l_el=25, dx=0.01, **st, weapon=w("r", -75)),
+        Pose(spine=3, head=2, **rest, **far, **st, weapon=w("r", -88)),                          # start
+        Pose(spine=3, head=1, r_sh=45, r_el=45, **far, **st, weapon=w("r", -70)),                # lifting
+        Pose(spine=5, head=0, r_sh=70, r_el=20, l_sh=-8, l_el=22, dx=0.005, **st, weapon=w("r", -44)),
+        Pose(spine=6, head=0, **up, l_sh=-10, l_el=24, dx=0.008, **st, weapon=w("r", -40)),      # held
+        Pose(spine=6, head=0, r_sh=76, r_el=14, l_sh=-10, l_el=24, dx=0.008, **st, weapon=w("r", -39)),
+        Pose(spine=6, head=0, **up, l_sh=-10, l_el=24, dx=0.008, **st, weapon=w("r", -40)),
+        Pose(spine=4, head=1, r_sh=45, r_el=45, **far, dx=0.003, **st, weapon=w("r", -68)),      # lowering
+        Pose(spine=3, head=2, **rest, **far, **st, weapon=w("r", -88)),                          # back to start
     ]
 
 
@@ -267,9 +301,9 @@ TEMPLATES = {
     "a2": dict(fn=a2, animation="attack", variant="a2", name_vi="Vũ khí một tay", grip="always",
                kinds=["one_handed"], prompt="attacking, swinging arm, clenched hand"),
     "a5": dict(fn=a5, animation="attack", variant="a5", name_vi="Cung", grip="always", kinds=["bow"],
-               prompt="archery stance, aiming, arms raised, clenched hands"),
+               prompt="archery, drawing a bow, bow arm extended forward, drawing hand at the cheek, clenched hands"),
     "a6": dict(fn=a6, animation="attack", variant="a6", name_vi="Gậy phép", grip="always", kinds=["staff"],
-               prompt="casting, raising arm, clenched hand"),
+               prompt="holding a staff, arm raised forward, clenched hand"),
     "a7": dict(fn=a7, animation="attack", variant="a7", name_vi="Tay trái tung chiêu", grip="always",
                kinds=["one_handed", "staff"], prompt="casting spell, arm outstretched forward, open palm, other hand clenched"),
 }

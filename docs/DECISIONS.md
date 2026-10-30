@@ -277,6 +277,14 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
     a drawing that lost over 75% of its pixels or does not build is refused and the old one kept. A redraw deletes
     the copy of the old drawing.
   - Not built: picking parts from earlier draws (C) and a no-AI fallback (D), until the owner finds them needed.
+- A5 bow and A6 staff redone (owner, 2026-10-31):
+  - A5 follows the archery shot cycle (archery guides and Wikimedia Commons photos): bow low, set-up, bow arm
+    straight forward at shoulder height, draw hand pulled back to the jaw with the elbow behind and level with the
+    arrow, hold, release (hand slides back past the ear, open), follow-through. Draw-hand positions are solved
+    from target points (authoring.reach). Frame 4 keeps the elbow low in front: a flat side view cannot show the
+    elbow swinging out toward the viewer on its way back.
+  - A6, the owner's description: the staff is raised forward to about 40 degrees above horizontal, held for
+    three frames, and brought back to where it started.
 
 ## Not done on purpose
 
