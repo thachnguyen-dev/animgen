@@ -108,10 +108,11 @@ public sealed class RigInfo
     public string? View { get; set; }                   // the assembled character, swinging parts tinted
     public string? HandView { get; set; }               // the open-hand drawing
     public List<HangingInfo> Hanging { get; set; } = new();
-    public List<string> Editing { get; set; } = new();  // drawings with a copy out for the owner's editor (rig | hand)
+    public List<string> Editing { get; set; } = new();  // "parts" while the Photoshop file is out for the owner
+    public string? Psd { get; set; }                    // the Photoshop file of the body parts (null: an older rig)
 }
 
-/// <summary>A rig drawing copied out for the owner's own paint program.</summary>
+/// <summary>The Photoshop file of the body parts, for the owner to correct.</summary>
 public sealed class EditReply
 {
     public string File { get; set; } = "";

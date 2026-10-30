@@ -67,7 +67,7 @@ public sealed class MainViewModel : ObservableObject
         MakeRigCommand = new AsyncCommand(_ => MakeRigAsync(null), OnError,
                                           _ => Ready && !IsBusy && _skeleton is { Confirmed: true });
         RedrawRigPartCommand = new AsyncCommand(p => MakeRigAsync(p as string), OnError, _ => Ready && !IsBusy && HasRig);
-        EditRigPartCommand = new AsyncCommand(p => EditRigPartAsync((string)p!), OnError, _ => Ready && !IsBusy && HasRig);
+        EditRigCommand = new AsyncCommand(_ => EditRigAsync(), OnError, _ => Ready && !IsBusy && HasPartsFile);
         ReloadRigCommand = new AsyncCommand(_ => ReloadRigAsync(), OnError, _ => Ready && !IsBusy && IsEditingRig);
         GenerateCommand = new AsyncCommand(_ => GenerateAsync(), OnError, _ => CanGenerate);
         RegenerateAllCommand = new AsyncCommand(_ => RegenerateAsync(null), OnError,
@@ -155,14 +155,18 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public string RigText => HasRig
-        ? "Phần tô màu sẽ đung đưa khi chuyển động. Hình nào sai thì bấm “Vẽ lại” dưới hình đó, hoặc “Sửa…” để vẽ đè "
-          + "bằng chương trình vẽ của bạn, lưu lại rồi bấm “Nạp hình đã sửa”."
-        : "AI vẽ nhân vật một lần ở tư thế dang tay chân và một lần với bàn tay mở (khoảng 2 phút). Mọi khung hình được làm từ hai hình này.";
+        ? "Phần tô màu sẽ đung đưa khi chuyển động. Bộ phận nào sai thì bấm “Sửa trong Photoshop”: mỗi bộ phận là một "
+          + "lớp riêng; sửa, lưu lại (Ctrl+S) là khung nhân vật được dựng lại. Hình nào hỏng hẳn thì bấm “Vẽ lại”."
+        : "AI vẽ nhân vật ở tư thế dang tay chân và một bàn tay mở, rồi tách từng bộ phận và vẽ nốt phần bị che "
+          + "(khoảng 8 phút). Mọi khung hình được làm từ các bộ phận này.";
 
     public string RigButtonText => HasRig ? "Vẽ lại cả hai hình" : "Vẽ khung nhân vật";
 
     private bool _isEditingRig;
     public bool IsEditingRig { get => _isEditingRig; private set => Set(ref _isEditingRig, value); }
+
+    private bool _hasPartsFile;
+    public bool HasPartsFile { get => _hasPartsFile; private set => Set(ref _hasPartsFile, value); }
 
     public ObservableCollection<HangingItem> HangingParts { get; } = new();
 
@@ -267,7 +271,7 @@ public sealed class MainViewModel : ObservableObject
     public ICommand FlipFacingCommand { get; }
     public ICommand MakeRigCommand { get; }
     public ICommand RedrawRigPartCommand { get; }
-    public ICommand EditRigPartCommand { get; }
+    public ICommand EditRigCommand { get; }
     public ICommand ReloadRigCommand { get; }
     public ICommand GenerateCommand { get; }
     public ICommand RegenerateAllCommand { get; }
@@ -389,33 +393,109 @@ public sealed class MainViewModel : ObservableObject
     private async Task MakeRigAsync(string? part)
     {
         if (_api == null) return;
+        // A new spread-pose drawing makes every part again; only the hand keeps the owner's corrections.
+        if (IsEditingRig && part != "hand"
+            && System.Windows.MessageBox.Show(System.Windows.Application.Current.MainWindow,
+                   "Vẽ lại sẽ làm lại mọi bộ phận, những chỗ bạn đã sửa trong Photoshop sẽ mất. Vẫn vẽ lại?",
+                   "Vẽ lại khung nhân vật", System.Windows.MessageBoxButton.YesNo,
+                   System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes)
+            return;
         StopPlay();
         TaskReply r = await _api.MakeRigAsync(null, part);
         await RunTaskAsync(r.Task!);
     }
 
-    /// <summary>The drawing opens in the owner's own paint program (owner, 2026-10-31).</summary>
-    private async Task EditRigPartAsync(string part)
+    /// <summary>The body parts open in Photoshop, one layer each (owner, 2026-10-31); saving rebuilds the rig.</summary>
+    private async Task EditRigAsync()
     {
         if (_api == null) return;
-        EditReply r = await _api.EditRigAsync(part);
+        EditReply r = await _api.EditRigAsync();
         if (r.State != null) ApplyState(r.State);
-        try { Process.Start(new ProcessStartInfo(r.File) { UseShellExecute = true, Verb = "edit" }); }
+        WatchPartsFile(r.File);
+        string? photoshop = PhotoshopPath();
+        try
+        {
+            Process.Start(photoshop != null
+                ? new ProcessStartInfo(photoshop, $"\"{r.File}\"") { UseShellExecute = false }
+                : new ProcessStartInfo(r.File) { UseShellExecute = true });
+        }
         catch (Exception)
         {
-            try { Process.Start(new ProcessStartInfo(r.File) { UseShellExecute = true }); }
-            catch (Exception) { OpenFolder(Path.GetDirectoryName(r.File)!); }
+            OpenFolder(Path.GetDirectoryName(r.File)!);
         }
-        SetStatus(StatusKind.Ok, "Đã mở hình để sửa. Vẽ đè lên tay, chân… (giữ nguyên tư thế và kích thước), lưu lại "
-                                 + "dạng PNG rồi bấm “Nạp hình đã sửa”.");
+        SetStatus(StatusKind.Ok, photoshop != null
+            ? "Đã mở các bộ phận trong Photoshop. Sửa từng lớp (giữ tên lớp, đừng đổi cỡ hình), rồi lưu lại (Ctrl+S)."
+            : "Không thấy Photoshop nên đã mở tệp bằng chương trình mặc định. Sửa từng lớp rồi lưu lại dạng PSD.");
     }
 
-    private async Task ReloadRigAsync()
+    /// <summary>Photoshop's own path, as Windows registers it for "Run" (App Paths); null if not installed.</summary>
+    private static string? PhotoshopPath()
+    {
+        foreach (RegistryKey root in new[] { Registry.LocalMachine, Registry.CurrentUser })
+        {
+            try
+            {
+                using RegistryKey? key = root.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Photoshop.exe");
+                if (key?.GetValue(null) is string path && File.Exists(path.Trim('"'))) return path.Trim('"');
+            }
+            catch (Exception) { }
+        }
+        return null;
+    }
+
+    // Photoshop saves through a temporary file and a rename, in several writes: the rebuild waits until it is quiet.
+    private FileSystemWatcher? _partsWatcher;
+    private DispatcherTimer? _partsQuiet;
+
+    private void WatchPartsFile(string file)
+    {
+        if (_partsWatcher != null && _partsWatcher.Path == Path.GetDirectoryName(file)) return;
+        StopWatchingParts();
+        _partsQuiet = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
+        _partsQuiet.Tick += async (_, _) =>
+        {
+            if (IsBusy) return;                         // tried again on the next tick
+            _partsQuiet!.Stop();
+            await ReloadRigAsync(fromSave: true);
+        };
+        _partsWatcher = new FileSystemWatcher(Path.GetDirectoryName(file)!, Path.GetFileName(file))
+        {
+            NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+        };
+        FileSystemEventHandler changed = (_, _) => System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            _partsQuiet?.Stop();
+            _partsQuiet?.Start();
+        });
+        _partsWatcher.Changed += changed;
+        _partsWatcher.Created += changed;
+        _partsWatcher.Renamed += (s, e) => changed(s, e);
+        _partsWatcher.EnableRaisingEvents = true;
+    }
+
+    private void StopWatchingParts()
+    {
+        _partsQuiet?.Stop();
+        _partsQuiet = null;
+        _partsWatcher?.Dispose();
+        _partsWatcher = null;
+    }
+
+    private Task ReloadRigAsync() => ReloadRigAsync(fromSave: false);
+
+    private async Task ReloadRigAsync(bool fromSave)
     {
         if (_api == null) return;
-        StopPlay();
-        ApplyState(await _api.ReloadRigAsync());
-        SetStatus(StatusKind.Ok, "Đã dựng lại khung nhân vật từ hình đã sửa.");
+        try
+        {
+            StopPlay();
+            ApplyState(await _api.ReloadRigAsync());
+            SetStatus(StatusKind.Ok, "Đã dựng lại khung nhân vật từ các bộ phận đã sửa.");
+        }
+        catch (BackendException ex) when (fromSave)
+        {
+            SetStatus(StatusKind.Error, ex.Message);    // saved from Photoshop: told in the status line, no dialog
+        }
     }
 
     private async Task HangingChangedAsync(HangingItem item)
@@ -449,6 +529,8 @@ public sealed class MainViewModel : ObservableObject
         }
         HasHanging = HangingParts.Count > 0;
         IsEditingRig = rig is { Editing.Count: > 0 };
+        HasPartsFile = rig?.Psd != null;
+        if (!IsEditingRig) StopWatchingParts();
     }
 
     // ---------------------------------------------------------------------------------------------------------

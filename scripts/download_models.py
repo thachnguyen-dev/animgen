@@ -35,6 +35,11 @@ MODELS = [
      "MIT; training data CC-BY 4.0"),
     # Reads the character's look as tags once per character, so the drawing prompt names it (gender, hair, outfit).
     ("wd-tagger", "SmilingWolf/wd-vit-tagger-v3", ["model.onnx", "selected_tags.csv"], "Apache-2.0"),
+    # Body-part layers (parts.py): Segment Anything follows each part's outline; the clothes parser tells legs from
+    # garments, so a cape or a skirt never goes with a limb.
+    ("sam2", "facebook/sam2.1-hiera-small", ["*.json", "model.safetensors"], "Apache-2.0"),
+    ("clothes-parsing", "mattmdjaga/segformer_b2_clothes", ["config.json", "preprocessor_config.json",
+                                                            "model.safetensors"], "MIT"),
 ]
 
 # ControlNet Union ProMax is two specially named files in the repository; they are renamed to the standard names.

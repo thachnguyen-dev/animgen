@@ -163,7 +163,7 @@
                         <StackPanel>
                             <TextBlock Style="{StaticResource TextTitle}" Text="2. Khung nhân vật"/>
                             <Button Content="{Binding RigButtonText}" Command="{Binding MakeRigCommand}" HorizontalAlignment="Left"/>
-                            <!-- Each drawing says which parts it gives, and is redrawn or edited on its own (owner, 2026-10-31) -->
+                            <!-- Each drawing is redrawn on its own; the parts are corrected in Photoshop, one layer each (owner, 2026-10-31) -->
                             <UniformGrid Columns="2" Visibility="{Binding HasRig, Converter={StaticResource BoolToVis}}">
                                 <StackPanel Margin="{StaticResource SpaceRight}">
                                     <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeThumb}"
@@ -172,11 +172,10 @@
                                                AutomationProperties.Name="Khung nhân vật"/>
                                     </Border>
                                     <TextBlock Style="{StaticResource TextMuted}"
-                                               Text="Tay, chân, áo choàng lấy từ hình này. Đầu và thân luôn lấy từ ảnh của bạn."/>
+                                               Text="Nhân vật ghép từ các bộ phận riêng. Đầu luôn lấy từ ảnh của bạn."/>
                                     <StackPanel Orientation="Horizontal" Margin="{StaticResource SpaceGap}">
                                         <Button Content="Vẽ lại" Command="{Binding RedrawRigPartCommand}" CommandParameter="rig"
-                                                Padding="8,4" Margin="{StaticResource SpaceRight}"/>
-                                        <Button Content="Sửa…" Command="{Binding EditRigPartCommand}" CommandParameter="rig" Padding="8,4"/>
+                                                Padding="8,4"/>
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel>
@@ -189,13 +188,19 @@
                                                Text="Chỉ lấy bàn tay mở từ hình này, cho các khung tung chiêu."/>
                                     <StackPanel Orientation="Horizontal" Margin="{StaticResource SpaceGap}">
                                         <Button Content="Vẽ lại" Command="{Binding RedrawRigPartCommand}" CommandParameter="hand"
-                                                Padding="8,4" Margin="{StaticResource SpaceRight}"/>
-                                        <Button Content="Sửa…" Command="{Binding EditRigPartCommand}" CommandParameter="hand" Padding="8,4"/>
+                                                Padding="8,4"/>
                                     </StackPanel>
                                 </StackPanel>
                             </UniformGrid>
-                            <Button Content="Nạp hình đã sửa" Command="{Binding ReloadRigCommand}" HorizontalAlignment="Left"
-                                    Visibility="{Binding IsEditingRig, Converter={StaticResource BoolToVis}}"/>
+                            <!-- The parts file covers both drawings, so its buttons span the step -->
+                            <StackPanel Orientation="Horizontal" Margin="{StaticResource SpaceGap}"
+                                        Visibility="{Binding HasRig, Converter={StaticResource BoolToVis}}">
+                                <Button Content="Sửa trong Photoshop" Command="{Binding EditRigCommand}"
+                                        Margin="{StaticResource SpaceRight}"/>
+                                <Button Content="Nạp lại" Command="{Binding ReloadRigCommand}"
+                                        AutomationProperties.Name="Nạp lại từ Photoshop"
+                                        Visibility="{Binding IsEditingRig, Converter={StaticResource BoolToVis}}"/>
+                            </StackPanel>
                             <ItemsControl ItemsSource="{Binding HangingParts}"
                                           Visibility="{Binding HasHanging, Converter={StaticResource BoolToVis}}">
                                 <ItemsControl.ItemTemplate>

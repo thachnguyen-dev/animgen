@@ -67,7 +67,7 @@ def test_missing_models_reported(tmp_path):
 def test_diffusers_engine_reports_missing_models(tmp_path):
     from animgen.engines.diffusers_engine import DiffusersEngine
     eng = DiffusersEngine(tmp_path)
-    assert len(eng.missing_models()) == 9
+    assert len(eng.missing_models()) == 11
     with pytest.raises(EngineError) as e:
         eng.load()
     assert e.value.kind == "models_missing"

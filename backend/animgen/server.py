@@ -15,8 +15,8 @@ Routes (all JSON):
   POST /character/skeleton {points}
   POST /rig {seed?, part?}             -> {task}   (the AI draws the character's rig and hand images;
                                         part 'rig' or 'hand': only that one)
-  POST /rig/edit {part}                -> {file, state}  (a copy of one drawing for the owner's own editor)
-  POST /rig/reload                     -> state    (the rig rebuilt from the edited drawings)
+  POST /rig/edit                       -> {file, state}  (the Photoshop file of the body parts, to correct)
+  POST /rig/reload                     -> state    (the rig rebuilt from the saved Photoshop file)
   POST /rig/hanging {name, on: bool}   -> state    (a cape, skirt or hair swings or stays as drawn)
   POST /generate {animation, grip?: bool, seed?, finish?: bool} -> {task}
                                        (grip: hands closed, where the animation leaves it open;
@@ -119,7 +119,7 @@ class App:
                                                                      part))
                 return 200, {"task": t.to_json()}
             if parts == ["rig", "edit"]:
-                return 200, s.rig_edit_file(_req(body, "part", str))
+                return 200, s.rig_edit_file()
             if parts == ["rig", "reload"]:
                 return 200, s.reload_rig_edits()
             if parts == ["rig", "hanging"]:

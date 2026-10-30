@@ -10,6 +10,9 @@ Frames come from the character's rig (owner, 2026-10-30, DECISIONS.md "Layered c
 skeleton, the AI draws the character once in a spread pose and once with an open hand (``make_rig``); every frame
 is then those pieces bent onto the template (rig.py), in seconds, optionally repainted lightly (finish.py). The rig
 is saved by image content like the skeleton, and used while its skeleton is the confirmed one.
+
+The pieces are body-part layers (owner, 2026-10-31, parts.py): found in the spread-pose drawing, what each hides
+rebuilt by the AI, saved as one Photoshop file the owner can correct; the rig is rebuilt from it when it is saved.
 """
 
 from __future__ import annotations
@@ -31,10 +34,11 @@ from . import config
 from .authoring import Pose, solve
 from .engines.base import Engine, EngineError, FrameRequest
 from .finish import finish as finish_frame
-from .rig import Rig, build_rig
+from . import parts as parts_mod
+from .rig import Rig, below_neck, build_rig, build_rig_from_layers, open_hand_layer, owner_head
 from .errors import AppError
 from .frames import Placement, clean_alpha, fit_to_canvas, place_reference, validate_image
-from .imaging import key_background, pick_background_colour, save_png
+from .imaging import pick_background_colour, save_png
 from .inputs import CharacterInput, check_character
 from .skeleton import LANK, LHIP, NECK, RANK, RHIP, Proportions, Skeleton, fit_frame, hand_point, measure
 from .tasks import Task
@@ -77,9 +81,15 @@ HAND_POSE = Pose(spine=2, head=0, r_sh=90, r_el=0, l_sh=-40, l_el=20, r_hip=28, 
 HAND_PROMPT = "standing, arm outstretched forward, open palm, fingers spread"
 HAND_STRENGTH = 0.75
 HANGING_TINT = {"cape": (255, 140, 0), "skirt": (0, 160, 255), "hair": (200, 0, 255)}
-# The owner's copies of the drawings, painted over in their own editor (owner, 2026-10-31).
-RIG_EDIT_FILES = {"rig": "rig_edit.png", "hand": "hand_edit.png"}
-EDIT_MIN_DRAWN = 0.25     # an edited drawing keeps at least this share of the drawn pixels
+# The body-part layers (owner, 2026-10-31): one PNG per part, and the Photoshop file the owner corrects them in.
+LAYERS_DIR = "layers"
+LAYERS_INFO = "layers.json"
+PSD_FILE = "parts.psd"
+EDIT_MIN_DRAWN = 0.25     # the edited layers keep at least this share of the drawn pixels
+
+
+def _skeleton(points: list) -> Skeleton:
+    return Skeleton([None if p is None else (float(p[0]), float(p[1])) for p in points])
 
 
 @dataclass
@@ -89,7 +99,9 @@ class RigState:
     still: set = field(default_factory=set)      # hanging parts the owner turned off: they stay as drawn
     view: Path | None = None                     # the assembled character, hanging parts tinted, own facing
     hand_view: Path | None = None                # the hand image, own facing
-    editing: list = field(default_factory=list)  # drawings with a copy out for the owner's editor
+    editing: list = field(default_factory=list)  # "parts" while the Photoshop file is out for the owner
+    pose: Skeleton | None = None                 # the bind pose the view is drawn in
+    psd: Path | None = None                      # the Photoshop file of the layers (None: an older rig without)
 
 
 @dataclass
@@ -311,8 +323,8 @@ class Session:
                 info["still"] = []                   # the hanging parts are found again in the new drawing
         for name, img in images.items():
             save_png(img, folder / f"{name}.png")
-            (folder / RIG_EDIT_FILES[name]).unlink(missing_ok=True)   # a copy being edited is of the old drawing
         self._write_rig_info(info)
+        self._make_layers(task, folder, seed, whole=part != "hand")
         with self._lock:
             self._reset_frames()
             self.template = None
@@ -320,6 +332,83 @@ class Session:
         if self.rig is None:
             raise AppError("rig_failed")
         return self.state()
+
+    def _make_layers(self, task: Task, folder: Path, seed: int, whole: bool) -> None:
+        """The body-part layers of the drawings (parts.py). ``whole`` False: only the open hand is made again, the
+        other layers (perhaps corrected by the owner) are kept."""
+        ch = self.character
+        rig_sk, hand_sk = self._rig_skeletons()
+        with Image.open(folder / "rig.png") as im:
+            rig_img = im.convert("RGBA")
+        hand_img = None
+        if (folder / "hand.png").exists():
+            with Image.open(folder / "hand.png") as im:
+                hand_img = im.convert("RGBA")
+        meta = None if whole else self._layers_info()
+        try:
+            if meta is None:
+                task.update(message="Đang tách các bộ phận…")
+                bind, missing = parts_mod.bind_skeleton(self._read_pose(rig_img), rig_sk)
+                finder = self.engine.parts
+                try:
+                    masks = parts_mod.find_parts(rig_img, bind, missing, finder)
+                finally:
+                    if finder is not None:
+                        finder.unload()
+                        self.engine.free_memory()
+
+                def progress(k: int, n: int) -> None:
+                    task.check_cancel()
+                    if k < n:
+                        task.update(message=f"Đang vẽ lại phần bị che ({k + 1}/{n})…")
+                layers = parts_mod.rebuild(self.engine, rig_img, masks, bind, ch.placement.image, ch.skeleton,
+                                           self.background, seed, progress)
+                # The face never drifts: the head is the owner's own; long hair adds only what the head has not.
+                head = owner_head(ch.placement.image, ch.skeleton, bind)
+                drawn_head = layers.get("head")
+                if drawn_head is not None and "torso" in layers:   # the reference's neck joins the body
+                    neck = below_neck(head.shape[:2], bind) & (drawn_head[..., 3] > 0)
+                    layers["torso"] = layers["torso"].copy()
+                    layers["torso"][neck] = drawn_head[neck]
+                layers["head"] = head
+                if "hair" in layers:
+                    layers["hair"] = layers["hair"].copy()
+                    layers["hair"][head[..., 3] > 0] = 0
+                    if not (layers["hair"][..., 3] > 0).any():
+                        del layers["hair"]
+            else:
+                layers = parts_mod.load_layers(folder / LAYERS_DIR)
+                bind = _skeleton(meta["bind"])
+        except EngineError as exc:
+            if exc.kind == "oom":
+                self.engine.free_memory()
+                raise AppError("gpu_out_of_memory") from exc
+            if exc.kind == "models_missing":
+                raise AppError("models_missing", detail=exc.detail) from exc
+            raise AppError("inference_failed", detail=exc.detail or exc.kind) from exc
+        layers.pop("open_hand", None)
+        hand = open_hand_layer(hand_img, hand_sk, bind) if hand_img is not None else None
+        if hand is not None:
+            layers["open_hand"] = hand
+        self._save_layers(folder, rig_img, layers, bind)
+
+    def _save_layers(self, folder: Path, guide: Image.Image, layers: dict, bind: Skeleton) -> None:
+        parts_mod.save_layers(folder / LAYERS_DIR, layers)
+        psd = folder / PSD_FILE
+        try:
+            parts_mod.write_psd(psd, guide, layers, self.character.placement.mirrored)
+        except OSError as exc:
+            raise AppError("rig_psd_busy") from exc
+        with open(folder / LAYERS_INFO, "w", encoding="utf-8") as f:
+            json.dump({"bind": bind.to_json(), "psd_time": psd.stat().st_mtime_ns}, f)
+
+    def _layers_info(self) -> dict | None:
+        try:
+            with open(self.rig_dir / self.character.key / LAYERS_INFO, encoding="utf-8") as f:
+                d = json.load(f)
+        except (OSError, ValueError):
+            return None
+        return d if isinstance(d.get("bind"), list) else None
 
     def _rig_info(self) -> dict | None:
         try:
@@ -332,62 +421,70 @@ class Session:
         with open(self.rig_dir / self.character.key / "rig.json", "w", encoding="utf-8") as f:
             json.dump(info, f, ensure_ascii=False)
 
-    def rig_edit_file(self, part: str) -> dict:
-        """A copy of one rig drawing for the owner to paint over in their own editor, facing as their character
-        does (owner, 2026-10-31). ``reload_rig_edits`` takes it back."""
+    def rig_edit_file(self) -> dict:
+        """The Photoshop file of the body parts, for the owner to correct (owner, 2026-10-31). ``reload_rig_edits``
+        takes it back; the app calls it when the file is saved."""
         ch = self.character
         if ch is None or self.rig is None:
             raise AppError("rig_missing")
-        if part not in RIG_EDIT_FILES:
-            raise AppError("unknown_part")
-        folder = self.rig_dir / ch.key
-        dst = folder / RIG_EDIT_FILES[part]
-        if not dst.exists():                         # a copy already being edited is never overwritten
-            with Image.open(folder / f"{part}.png") as im:
-                save_png(self._own_facing(im.convert("RGBA")), dst)
+        if self.rig.psd is None:
+            raise AppError("rig_layers_missing")
         with self._lock:
-            if part not in self.rig.editing:
-                self.rig.editing.append(part)
-        return {"file": str(dst), "state": self.state()}
+            if "parts" not in self.rig.editing:
+                self.rig.editing.append("parts")
+        return {"file": str(self.rig.psd), "state": self.state()}
 
     def reload_rig_edits(self) -> dict:
-        """The rig rebuilt from the drawings the owner edited. The old drawings come back if it cannot be built."""
+        """The rig rebuilt from the Photoshop file the owner saved. The old layers stay if it cannot be built."""
         ch = self.character
         if ch is None or self.rig is None:
             raise AppError("rig_missing")
-        folder = self.rig_dir / ch.key
-        edited = {}
-        for part, name in RIG_EDIT_FILES.items():
-            if not (folder / name).exists():
-                continue
-            with Image.open(folder / f"{part}.png") as im:
-                size, drawn = im.size, int((np.array(im.convert("RGBA"))[..., 3] > 127).sum())
-            try:
-                with Image.open(folder / name) as im:
-                    img = im.convert("RGBA")
-            except OSError as exc:
-                raise AppError("rig_edit_unreadable") from exc
-            if img.size != size:
-                raise AppError("rig_edit_size")
-            img = key_background(img)
-            if (np.array(img)[..., 3] > 127).sum() < EDIT_MIN_DRAWN * drawn:
-                raise AppError("rig_edit_failed")    # most of the drawing erased: nothing to build from
-            edited[part] = self._own_facing(img)     # mirroring again turns it back to facing right
-        if not edited:
+        if self.rig.psd is None or not self.rig.psd.exists():
             raise AppError("rig_edit_missing")
-        old = {part: (folder / f"{part}.png").read_bytes() for part in edited}
-        for part, img in edited.items():
-            save_png(img, folder / f"{part}.png")
+        meta = self._layers_info()
+        if meta is not None and self.rig.psd.stat().st_mtime_ns == meta.get("psd_time"):
+            return self.state()                      # not saved since it was written: the frames stay
+        self._import_psd(self.rig_dir / ch.key)
         with self._lock:
             self._reset_frames()
             self.template = None
+        editing = list(self.rig.editing)
         self._load_rig()
         if self.rig is None:
-            for part, data in old.items():
-                (folder / f"{part}.png").write_bytes(data)
-            self._load_rig()
-            raise AppError("rig_edit_failed")
+            raise AppError("rig_failed")
+        self.rig.editing = editing
         return self.state()
+
+    def _import_psd(self, folder: Path) -> None:
+        """The owner's Photoshop file into the layers. Raises AppError and keeps the old layers when it is not
+        usable."""
+        ch = self.character
+        meta = self._layers_info()
+        if meta is None:
+            raise AppError("rig_layers_missing")
+        psd = folder / PSD_FILE
+        old = parts_mod.load_layers(folder / LAYERS_DIR)
+        size = ch.placement.image.size
+        try:
+            new = parts_mod.read_psd(psd, size, ch.placement.mirrored)
+        except ValueError as exc:
+            raise AppError("rig_edit_size" if str(exc) == "size" else "rig_edit_unreadable") from exc
+        except Exception as exc:  # noqa: BLE001
+            raise AppError("rig_edit_unreadable") from exc
+
+        def drawn(layers: dict) -> int:
+            return sum(int((v[..., 3] > 127).sum()) for k, v in layers.items() if k != "open_hand")
+        if "torso" not in new or drawn(new) < EDIT_MIN_DRAWN * drawn(old):
+            raise AppError("rig_edit_failed")        # most of the character erased, or the body layer gone
+        bind = _skeleton(meta["bind"])
+        try:
+            build_rig_from_layers(new, bind)
+        except Exception as exc:  # noqa: BLE001
+            raise AppError("rig_edit_failed") from exc
+        parts_mod.save_layers(folder / LAYERS_DIR, new)
+        meta["psd_time"] = psd.stat().st_mtime_ns
+        with open(folder / LAYERS_INFO, "w", encoding="utf-8") as f:
+            json.dump(meta, f)
 
     def _load_rig(self) -> None:
         """The saved rig of this image, if it was drawn for the current skeleton."""
@@ -400,29 +497,45 @@ class Session:
         try:
             with open(folder / "rig.json", encoding="utf-8") as f:
                 info = json.load(f)
-            saved = [None if p is None else (round(float(p[0])), round(float(p[1]))) for p in info["skeleton"]]
+            saved = [None if p is None else (float(p[0]), float(p[1])) for p in info["skeleton"]]
         except (OSError, ValueError, KeyError, TypeError):
             return
-        now = [None if p is None else (round(p[0]), round(p[1])) for p in ch.skeleton.points]
-        if saved != now or not (folder / "rig.png").exists():
+        # Saved to 2 decimals: rounding both to whole pixels could still differ (archer test, 541.4996 vs 541.5).
+        same = len(saved) == len(ch.skeleton.points) and all(
+            (a is None) == (b is None) and (a is None or max(abs(a[0] - b[0]), abs(a[1] - b[1])) <= 1.0)
+            for a, b in zip(saved, ch.skeleton.points))
+        if not same or not (folder / "rig.png").exists():
             return
         rig_sk, hand_sk = self._rig_skeletons()
+        meta = self._layers_info()
+        psd = folder / PSD_FILE
+        if meta is not None and psd.exists() and psd.stat().st_mtime_ns != meta.get("psd_time"):
+            try:                                     # saved in Photoshop while the app was closed
+                self._import_psd(folder)
+            except AppError as exc:
+                import sys
+                print(f"parts file not taken: {exc.code}", file=sys.stderr)
         try:
-            with Image.open(folder / "rig.png") as im:
-                rig_img = im.convert("RGBA")
             hand_img = None
             if (folder / "hand.png").exists():
                 with Image.open(folder / "hand.png") as im:
                     hand_img = im.convert("RGBA")
-            rig = build_rig(ch.placement.image, ch.skeleton, rig_img, rig_sk, hand_img, hand_sk)
+            if meta is not None:
+                pose = _skeleton(meta["bind"])
+                rig = build_rig_from_layers(parts_mod.load_layers(folder / LAYERS_DIR), pose)
+            else:                                    # a rig made before the layers (2026-10-31)
+                pose = rig_sk
+                with Image.open(folder / "rig.png") as im:
+                    rig_img = im.convert("RGBA")
+                rig = build_rig(ch.placement.image, ch.skeleton, rig_img, rig_sk, hand_img, hand_sk)
         except Exception as exc:  # noqa: BLE001
             import sys
             print(f"rig not usable: {type(exc).__name__}: {exc}", file=sys.stderr)
             return
-        state = RigState(rig, int(info.get("seed", 0)), set(info.get("still", [])))
-        state.editing = [part for part, name in RIG_EDIT_FILES.items() if (folder / name).exists()]
+        state = RigState(rig, int(info.get("seed", 0)), set(info.get("still", [])), pose=pose,
+                         psd=psd if meta is not None and psd.exists() else None)
         state.view = self.temp / f"rig_view_{uuid.uuid4().hex[:8]}.png"
-        save_png(self._own_facing(self._rig_view(rig, rig_sk, state.still)), state.view)
+        save_png(self._own_facing(self._rig_view(rig, pose, state.still)), state.view)
         if hand_img is not None:
             state.hand_view = self.temp / f"hand_view_{uuid.uuid4().hex[:8]}.png"
             save_png(self._own_facing(hand_img), state.hand_view)
@@ -467,9 +580,8 @@ class Session:
                 self._write_rig_info(info)
             except OSError:
                 pass
-        rig_sk, _ = self._rig_skeletons()
         state.view = self.temp / f"rig_view_{uuid.uuid4().hex[:8]}.png"
-        save_png(self._own_facing(self._rig_view(state.rig, rig_sk, state.still)), state.view)
+        save_png(self._own_facing(self._rig_view(state.rig, state.pose, state.still)), state.view)
         return self.state()
 
     # ------------------------------------------------------------------------------------------------------------
@@ -776,6 +888,7 @@ class Session:
                     "view": str(self.rig.view) if self.rig.view else None,
                     "hand_view": str(self.rig.hand_view) if self.rig.hand_view else None,
                     "editing": list(self.rig.editing),
+                    "psd": str(self.rig.psd) if self.rig.psd else None,
                     "hanging": [{"name": p.name, "on": p.name not in self.rig.still}
                                 for m in self.rig.rig.meshes for p in m.hanging],
                 },

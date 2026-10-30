@@ -22,6 +22,11 @@ Open hands (owner, 2026-10-30): the rig image has closed fists. A second AI draw
 stretched forward, open palm) gives an open hand, put on the forearm in place of the fist in a second version of
 each arm mesh; a template frame says which hands are open.
 
+Body-part layers (owner, 2026-10-31, parts.py): a rig made since then is built from the owner's layers instead
+(``build_rig_from_layers``): every limb from its own layers on its own bones (the far ones included, as found in the
+reference), the cape, the skirt and long hair as meshes of their own that swing as a whole, the open hand from its
+layer. ``build_rig`` stays for rigs made before.
+
 All images are canvas-sized RGBA facing right (as the templates); skeletons are canvas coordinates.
 """
 
@@ -35,7 +40,7 @@ from PIL import Image
 
 from .cloth import Hanging, bend, find_hanging, ground_speed, simulate
 from .puppet import PART_GROW, _cut, _drop_specks, _reference_bones, _segment_distance, _similarity, _target_bones
-from .skeleton import Skeleton
+from .skeleton import NECK, Skeleton
 
 # Limb parts and the bones they hang on (names as puppet._target_bones).
 LIMBS = ("uarm", "larm", "uleg", "lleg", "uarm_far", "larm_far", "uleg_far", "lleg_far")
@@ -367,6 +372,140 @@ def _with_open_hand(pieces: dict, hand: tuple[np.ndarray, tuple], bind: dict) ->
     forearm[..., 3] = np.maximum(forearm[..., 3], moved[..., 3])
     out["larm"] = forearm
     return out
+
+
+def below_neck(shape: tuple[int, int], sk: Skeleton) -> np.ndarray:
+    """The pixels below the level line through the neck (the bind pose stands upright; a line square to the
+    neck-nose bone slanted with the face and kept a strip of the shoulder, knight and archer test 2026-10-31)."""
+    neck = sk.points[NECK]
+    return np.mgrid[0:shape[0], 0:shape[1]][0] > neck[1]
+
+
+def owner_head(original: Image.Image, original_sk: Skeleton, bind_sk: Skeleton) -> np.ndarray:
+    """The head cut from the owner's image down to the neck, its neck moved onto the bind pose's neck (upright, as
+    drawn). Below the neck the body comes from the reference (knight test, 2026-10-31: the cut carried a piece of
+    the shoulder and the cape, which then turned with the head)."""
+    orig = np.array(original.convert("RGBA"))
+    h, w = orig.shape[:2]
+    ref_bones = {k: v for k, v in _reference_bones(original_sk).items() if v[0] is not None and v[1] is not None}
+    names, label, alpha, _ = _cut(orig, original_sk, ref_bones)
+    head = _grown(label == names.index("head"), alpha)
+    (nx, ny), (bx, by) = ref_bones["head"][0], _target_bones(bind_sk)["head"][0]
+    shift = np.array([[1.0, 0.0, bx - nx], [0.0, 1.0, by - ny]])
+    out = cv2.warpAffine(np.where(head[..., None], orig, 0).astype(np.uint8), shift, (w, h),
+                         flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0, 0))
+    out[below_neck((h, w), bind_sk)] = 0
+    return out
+
+
+def open_hand_layer(hand_image: Image.Image, hand_sk: Skeleton, bind_sk: Skeleton) -> np.ndarray | None:
+    """The open hand of the hand image on the bind pose's near wrist, where the fist is (a layer of its own)."""
+    hand = _hand_piece(hand_image, hand_sk)
+    a, b = _target_bones(bind_sk)["larm"]
+    if hand is None or a is None or b is None:
+        return None
+    rgba, (ha, hb) = hand
+    h, w = rgba.shape[:2]
+    return cv2.warpAffine(rgba, _similarity(ha, hb, a, b), (w, h), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0, 0))
+
+
+# Meshes built from the owner's layers (parts.py), back to front: name, its layers in drawing order, parent first
+# (the layer, its bone: the bind pose has every bone, the far ones included), and what hangs from where.
+LAYER_GROUPS = (
+    ("cape", (("cape", "torso"),), "cape"),
+    ("arm_far", (("far_arm_upper", "uarm_far"), ("far_arm_lower", "larm_far")), None),
+    ("leg_far", (("far_leg_upper", "uleg_far"), ("far_leg_lower", "lleg_far")), None),
+    ("leg", (("leg_upper", "uleg"), ("leg_lower", "lleg")), None),
+    ("body", (("torso", "torso"), ("head", "head")), None),
+    ("skirt", (("skirt", "torso"),), "skirt"),
+    ("hair", (("hair", "head"),), "hair"),
+    ("arm", (("arm_upper", "uarm"), ("arm_lower", "larm")), None),
+)
+HANG_TOP = 0.05           # of a hanging layer's length: its pivot is the middle of its pixels this close to its top
+
+
+def build_rig_from_layers(layers: dict[str, np.ndarray], bind_sk: Skeleton) -> Rig:
+    """The rig from the owner's layers (canvas-sized RGBA in the bind pose, facing right). Every part is the layer as
+    it is: a cape, a skirt or long hair is its own mesh and swings as a whole, so nothing of it moves with a limb."""
+    bind = {k: v for k, v in _target_bones(bind_sk).items() if v[0] is not None and v[1] is not None}
+    size = next(iter(layers.values())).shape[:2]
+    h, w = size
+    figure = _figure_height(bind_sk)
+    blend = JOINT_BLEND * figure
+    meshes = []
+    for name, drawn, hangs in LAYER_GROUPS:
+        variants = [(drawn, layers, False)]
+        if name in ("arm", "arm_far") and "open_hand" in layers:
+            variants.append((drawn, _open_layers(layers, bind, far=name == "arm_far"), True))
+        for parts, src, open_hand in variants:
+            rgba = np.zeros((h, w, 4), np.uint8)
+            owner = np.zeros((h, w), np.int32)
+            bones = []
+            for order, (layer, bone) in enumerate(parts, start=1):
+                if layer not in src or bone not in bind or not (src[layer][..., 3] > 0).any():
+                    continue
+                p = src[layer]
+                k = p[..., 3:4].astype(np.float32) / 255
+                rgba[..., :3] = (p[..., :3] * k + rgba[..., :3] * (1 - k)).astype(np.uint8)
+                rgba[..., 3] = np.maximum(rgba[..., 3], p[..., 3])
+                owner[p[..., 3] > 127] = len(bones) + 1
+                bones.append((bone, bone))
+            if not bones:
+                continue
+            mesh = _mesh(name, rgba, owner, owner == 2, tuple(bones), bind, blend)
+            if mesh is None:
+                continue
+            mesh.open_hand = open_hand
+            if hangs:
+                part = _whole_hanging(hangs, mesh.verts, rgba[..., 3] > 127, bind, figure)
+                mesh.hanging = [part] if part is not None else []
+            if name == "body" and len(bones) == 2:
+                mesh.keep = ((owner == 2) * 255).astype(np.uint8)
+            if name in ("arm", "arm_far") and len(bones) == 2:
+                lower = bones[1][0]
+                mesh.keep = ((owner == 2) & (_along((h, w), *bind[lower]) > HAND_CUT)).astype(np.uint8) * 255
+            meshes.append(mesh)
+    return Rig(meshes, bind, (w, h))
+
+
+def _open_layers(layers: dict, bind: dict, far: bool) -> dict:
+    """The layers with the fist taken off the forearm and the open hand on its wrist (moved onto the far forearm,
+    a little darker, for the far arm)."""
+    lower, bone = ("far_arm_lower", "larm_far") if far else ("arm_lower", "larm")
+    if lower not in layers or bone not in bind or "larm" not in bind:
+        return layers
+    hand = layers["open_hand"]
+    h, w = hand.shape[:2]
+    if far:
+        hand = cv2.warpAffine(hand, _similarity(*bind["larm"], *bind[bone]), (w, h), flags=cv2.INTER_LINEAR,
+                              borderValue=(0, 0, 0, 0))
+        hand = hand.copy()
+        hand[..., :3] = (hand[..., :3] * FAR_DARKEN).astype(np.uint8)
+    forearm = layers[lower].copy()
+    forearm[_along((h, w), *bind[bone]) > HAND_CUT] = 0
+    k = hand[..., 3:4].astype(np.float32) / 255
+    forearm[..., :3] = (hand[..., :3] * k + forearm[..., :3] * (1 - k)).astype(np.uint8)
+    forearm[..., 3] = np.maximum(forearm[..., 3], hand[..., 3])
+    return {**layers, lower: forearm}
+
+
+def _whole_hanging(name: str, verts: np.ndarray, mask: np.ndarray, bind: dict, figure: float) -> Hanging | None:
+    """The whole layer hangs from its top: nothing turns there, the full swing at its hem."""
+    from .cloth import HAIR_LENGTH
+    if not mask.any() or "torso" not in bind:
+        return None
+    a, b = (np.asarray(p, float) for p in bind["torso"])
+    d = (b - a) / (np.linalg.norm(b - a) + 1e-6)
+    py, px = np.nonzero(mask)
+    t = px * d[0] + py * d[1]
+    top = t <= t.min() + HANG_TOP * (t.max() - t.min())
+    pivot = np.array([px[top].mean(), py[top].mean()])
+    reach = float(((px - pivot[0]) * d[0] + (py - pivot[1]) * d[1]).max())
+    if reach <= 1 or (name == "hair" and reach < HAIR_LENGTH * figure):
+        return None
+    s = np.clip(((verts - pivot) @ d) / reach, 0, 1)
+    bone = "head" if name == "hair" else "torso"
+    return Hanging(name, bone, pivot, reach, s * s * (3 - 2 * s), mask)
 
 
 def build_rig(original: Image.Image, original_sk: Skeleton, rig_image: Image.Image, rig_sk: Skeleton,

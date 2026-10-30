@@ -71,6 +71,8 @@ class Engine:
     pose: PoseReader
     drawer: FrameDrawer
     remover: BackgroundRemover
+    # Finds the body parts in the rig image (parts.PartFinder); None cuts them by distance to the bones.
+    parts = None
 
     def free_memory(self) -> None:
         """Called after an out-of-memory error, before a retry."""

@@ -33,6 +33,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from ..parts import PartFinder
 from ..puppet import repose_with_depth
 from ..skeleton import Skeleton, draw_openpose
 from .base import Engine, EngineError, FrameRequest, ProgressFn
@@ -78,6 +79,8 @@ REQUIRED = [
     "dwpose/dw-ll_ucoco_384.onnx",
     "birefnet/config.json",
     "toonout/birefnet_finetuned_toonout.pth",
+    "sam2/model.safetensors",
+    "clothes-parsing/model.safetensors",
 ]
 
 
@@ -208,6 +211,8 @@ class SDXLDrawer:
         extra = dict(req.extra)
         if "rough" in extra:
             extra["rough"] = extra["rough"].resize((DRAW_SIZE, DRAW_SIZE), Image.Resampling.LANCZOS)
+        if "mask" in extra:
+            extra["mask"] = extra["mask"].resize((DRAW_SIZE, DRAW_SIZE), Image.Resampling.BILINEAR)
         small = FrameRequest(req.reference.resize((DRAW_SIZE, DRAW_SIZE), Image.Resampling.LANCZOS),
                              _scaled(req.reference_skeleton, k), _scaled(req.target_skeleton, k), req.background,
                              req.prompt, req.seed, req.hands_gripping, extra)
@@ -247,6 +252,10 @@ class SDXLDrawer:
             mask = Image.new("L", (size, size), 255)
             pose = draw_openpose(req.target_skeleton, (size, size))
             depth_img = depth
+        # Rebuilding a hidden part of the rig (parts.py): only the masked pixels are repainted.
+        if "mask" in req.extra:
+            mask.paste(Image.new("L", (size, size), 0), (width - size, 0))
+            mask.paste(req.extra["mask"].convert("L"), (width - size, 0))
 
         # Gripping hands are closed around a weapon attached later in the game; a template that names its own hand
         # shapes (A7: one open palm) keeps them.
@@ -294,6 +303,7 @@ class DiffusersEngine(Engine):
         self.pose = DWPoseReader(self.models / "dwpose")
         self.drawer = SDXLDrawer(self.models)
         self.remover = ToonOutRemover(self.models)
+        self.parts = PartFinder(self.models)
 
     def missing_models(self) -> list[str]:
         return [r for r in REQUIRED if not (self.models / r).exists()]
@@ -320,6 +330,7 @@ class DiffusersEngine(Engine):
 
     def unload(self) -> None:
         self.drawer.unload()
+        self.parts.unload()
         self.loaded = False
         self.free_memory()
 

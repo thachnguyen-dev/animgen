@@ -285,6 +285,44 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
     elbow swinging out toward the viewer on its way back.
   - A6, the owner's description: the staff is raised forward to about 40 degrees above horizontal, held for
     three frames, and brought back to where it started.
+- Body-part layers (owner, 2026-10-31; owner said "go ahead" to my plan):
+  - The owner's request: one reference image plus a group of separate body parts, corrected in Adobe software;
+    hidden sections rebuilt by the AI while the visible pixels stay; a cape, a skirt, clothing or accessories never
+    belong to an arm or a leg.
+  - Mine (backend/animgen/parts.py): after the two drawings, the parts are found in the spread-pose drawing.
+    Segment Anything 2.1 small (Apache-2.0) follows each limb's outline from points along its bones; a
+    clothes-parsing model (segformer_b2_clothes, MIT) says which pixels are legs and which are garments. Leftover
+    garments become cape (hangs from the back), skirt (spans the hips; garments below the hips too) or long hair.
+    The joints are read on the drawing itself (DWPose), with the forward arm and leg taken as the near ones.
+  - Hidden sections: each limb's expected outline (a capsule along its bones as wide as it is drawn) minus what
+    shows, within the figure, is repainted by the AI with the whole character as context (masked inpaint, strength
+    0.75), from a guess (the near limb moved onto the far bones, darker). The torso's hidden part is only what the
+    near arm covers, no wider than the body. The cape's hidden part is what the body and legs cover of its
+    outline, behind the spine only (in front of it the AI painted armour into the cape). Pixels the AI paints as
+    background are left out; pixels no part claimed (thin outlines) go to the nearest part.
+  - The head layer is the owner's own head, cut at the level line through the neck (the face never drifts); the
+    torso layer is the reference's, with the reference's neck below that line (in the owner's standing image the
+    near arm hangs over the torso).
+  - One Photoshop file per character image (data/rigs/<key>/parts.psd): the reference at the bottom as a guide,
+    then the group "Bộ phận" with one named layer per part, back to front, facing as the owner's character; the
+    open hand is a hidden layer. "Sửa trong Photoshop" opens it in Photoshop (App Paths registry, else the default
+    program); each save rebuilds the rig (the app watches the file; a save while the app was closed is taken on the
+    next start). Refused and kept as before: a resized file, an unreadable one, the "Thân" layer gone, or most of
+    the character erased. Layer names are how parts are found, so renamed layers are left out.
+  - The rig is built from the layers (rig.build_rig_from_layers): each limb on its own bones, the far ones as found
+    in the reference; cape, skirt and long hair are meshes of their own that swing as a whole. Rigs made before
+    keep the old builder.
+  - The PNG "Sửa…" copies (answer B above) are replaced by the Photoshop file. A redraw of the spread pose makes
+    every part again (the app asks first while the file is out); a redraw of the hand replaces only the open hand.
+  - Time on the RTX 4060: about 5-6 minutes more per character (parts 20 s, up to six hidden sections about 50 s
+    each; knight 380 s, archer 328 s with the drawings). Models: 280 MB more.
+  - App: the step-2 caption says the character is put together from separate parts; "Sửa trong Photoshop" and
+    "Nạp lại" (shown while the file is out) sit in one row under both drawings, as the file covers both (in the
+    left column the button was clipped, seen in a window capture).
+  - Known: on the knight the cape's frayed hem went to the far shin layer (the clothes parser called it leg); the
+    owner can move it in Photoshop.
+  - Fixed on the way: the rig was dropped when a saved joint rounded differently from the live one (archer: 541.5
+    against 541.4996); the skeletons now match within 1 px.
 
 ## Not done on purpose
 

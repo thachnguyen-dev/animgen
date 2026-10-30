@@ -52,7 +52,7 @@ public sealed class BackendClient : IDisposable
         PostAsync<TaskReply>("rig", new { seed, part });
 
     /// <summary>A copy of one rig drawing ("rig" or "hand") to paint over in the owner's own editor.</summary>
-    public Task<EditReply> EditRigAsync(string part) => PostAsync<EditReply>("rig/edit", new { part });
+    public Task<EditReply> EditRigAsync() => PostAsync<EditReply>("rig/edit", new { });
 
     /// <summary>The rig rebuilt from the edited drawings.</summary>
     public Task<SessionState> ReloadRigAsync() => PostAsync<SessionState>("rig/reload", new { });

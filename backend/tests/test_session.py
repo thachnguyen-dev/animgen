@@ -314,45 +314,107 @@ def test_one_rig_drawing_is_redrawn_and_the_other_kept(session, hero):
     assert info["seed"] == 2 and info["hand_seed"] == 7
 
 
-def test_the_owner_edits_a_rig_drawing_in_their_own_editor(session, hero):
+def test_the_rig_is_made_of_body_part_layers(session, hero):
+    from animgen import parts
     session.set_character(str(hero))
     assert run(lambda task: session.make_rig(task, seed=2)).state == "completed"
     folder = session.rig_dir / session.character.key
-    body = (folder / "rig.png").read_bytes()
-    with pytest.raises(AppError) as e:
-        session.reload_rig_edits()
-    assert e.value.code == "rig_edit_missing"
+    names = {p.stem for p in (folder / "layers").glob("*.png")}
+    assert {"torso", "head", "arm_upper", "arm_lower", "leg_upper", "leg_lower", "open_hand"} <= names
+    assert names <= set(parts.NAMES)
+    st = session.state()["rig"]
+    assert Path(st["psd"]).is_file()
+    from psd_tools import PSDImage
+    psd = PSDImage.open(st["psd"])
+    labels = [layer.name for layer in psd.descendants()]
+    assert labels[0] == parts.GUIDE and parts.GROUP in labels and parts.LABELS["torso"] in labels
+    hand = [layer for layer in psd.descendants() if layer.name == parts.LABELS["open_hand"]][0]
+    assert not hand.visible                              # shown only in the frames that open the hand
 
-    r = session.rig_edit_file("rig")
-    assert Path(r["file"]).is_file() and r["state"]["rig"]["editing"] == ["rig"]
-    img = Image.open(r["file"]).convert("RGBA")
-    a = np.array(img)
-    a[a[..., 3] > 0, 0] = 255                             # the owner repaints the drawing
-    Image.fromarray(a, "RGBA").save(r["file"])
+
+def test_the_owner_corrects_the_parts_in_photoshop(session, hero):
+    from animgen import parts
+    session.set_character(str(hero))
+    assert run(lambda task: session.make_rig(task, seed=2)).state == "completed"
+    folder = session.rig_dir / session.character.key
+    size, mirrored = session.character.placement.image.size, session.character.placement.mirrored
+    r = session.rig_edit_file()
+    assert r["file"] == session.state()["rig"]["psd"] and r["state"]["rig"]["editing"] == ["parts"]
+    guide = Image.open(folder / "rig.png")
+
+    layers = parts.read_psd(Path(r["file"]), size, mirrored)
+    layers["torso"][..., 0] = np.where(layers["torso"][..., 3] > 0, 255, layers["torso"][..., 0])
+    del layers["head"]                                   # the owner may delete a part
+    parts.write_psd(Path(r["file"]), guide, layers, mirrored)
     st = session.reload_rig_edits()
-    assert st["rig"] is not None and (folder / "rig.png").read_bytes() != body
-    assert session.rig_edit_file("rig")["file"] == r["file"]          # the copy being edited is kept
+    assert st["rig"] is not None and st["rig"]["editing"] == ["parts"]
+    torso = np.array(Image.open(folder / "layers" / "torso.png"))
+    assert (torso[torso[..., 3] > 0, 0] == 255).all() and not (folder / "layers" / "head.png").exists()
 
-    img.resize((img.width // 2, img.height // 2)).save(r["file"])     # cropped or resized: refused, rig kept
+    small = {k: v[::2, ::2].copy() for k, v in layers.items()}      # resized: refused, the layers kept
+    parts.write_psd(Path(r["file"]), guide.resize((size[0] // 2, size[1] // 2)), small, mirrored)
     with pytest.raises(AppError) as e:
         session.reload_rig_edits()
     assert e.value.code == "rig_edit_size" and session.rig is not None
 
-    flat = Image.new("RGB", img.size, (255, 255, 255))   # an editor that drops transparency
-    flat.paste(img, mask=img.getchannel("A"))
-    flat.save(r["file"])
-    session.reload_rig_edits()
-    assert np.array(Image.open(folder / "rig.png"))[0, 0, 3] == 0
-
-    Image.new("RGBA", img.size, (0, 0, 0, 0)).save(r["file"])       # nothing left to build from: old one back
-    before = (folder / "rig.png").read_bytes()
+    nothing = {"arm_upper": layers["arm_upper"]}         # the body layer gone: refused
+    parts.write_psd(Path(r["file"]), guide, nothing, mirrored)
     with pytest.raises(AppError) as e:
         session.reload_rig_edits()
-    assert e.value.code == "rig_edit_failed"
-    assert (folder / "rig.png").read_bytes() == before and session.rig is not None
+    assert e.value.code == "rig_edit_failed" and (folder / "layers" / "torso.png").exists()
 
-    assert run(lambda task: session.make_rig(task, seed=9, part="rig")).state == "completed"
-    assert not Path(r["file"]).exists() and session.state()["rig"]["editing"] == []
+    Path(r["file"]).write_bytes(b"not a psd")
+    with pytest.raises(AppError) as e:
+        session.reload_rig_edits()
+    assert e.value.code == "rig_edit_unreadable"
+
+
+def test_a_photoshop_file_saved_while_the_app_was_closed_is_taken_on_start(tmp_path, hero):
+    from animgen import parts
+    from animgen.engines.demo import DemoEngine
+    from animgen.session import Session
+    s = Session(DemoEngine(), tmp_path / "d")
+    s.set_character(str(hero))
+    assert run(lambda task: s.make_rig(task, seed=2)).state == "completed"
+    folder = s.rig_dir / s.character.key
+    size, mirrored = s.character.placement.image.size, s.character.placement.mirrored
+    psd = Path(s.state()["rig"]["psd"])
+    s.close()
+    layers = parts.read_psd(psd, size, mirrored)
+    layers["torso"][..., 1] = np.where(layers["torso"][..., 3] > 0, 7, layers["torso"][..., 1])
+    time.sleep(0.05)
+    parts.write_psd(psd, Image.open(folder / "rig.png"), layers, mirrored)
+    s2 = Session(DemoEngine(), tmp_path / "d")
+    s2.set_character(str(hero))
+    torso = np.array(Image.open(folder / "layers" / "torso.png"))
+    assert s2.rig is not None and (torso[torso[..., 3] > 0, 1] == 7).all()
+    s2.close()
+
+
+def test_a_rig_is_kept_when_its_saved_joints_differ_by_rounding_only(session, hero):
+    session.set_character(str(hero))
+    assert run(lambda task: session.make_rig(task, seed=2)).state == "completed"
+    path = session.rig_dir / session.character.key / "rig.json"
+    info = json.loads(path.read_text(encoding="utf-8"))
+    info["skeleton"] = [None if p is None else [p[0] + 0.4, p[1] - 0.4] for p in info["skeleton"]]
+    path.write_text(json.dumps(info), encoding="utf-8")
+    session.set_character(str(hero))
+    assert session.rig is not None
+
+
+def test_psd_round_trip_keeps_names_places_and_facing(tmp_path):
+    from animgen import parts
+    a = np.zeros((64, 48, 4), np.uint8)
+    a[10:20, 5:15] = (200, 10, 10, 255)
+    b = np.zeros((64, 48, 4), np.uint8)
+    b[30:50, 20:30] = (10, 200, 10, 255)
+    guide = Image.new("RGBA", (48, 64), (0, 0, 255, 255))
+    for mirrored in (False, True):
+        path = tmp_path / f"p{mirrored}.psd"
+        parts.write_psd(path, guide, {"torso": a, "arm_upper": b}, mirrored)
+        back = parts.read_psd(path, (48, 64), mirrored)
+        assert set(back) == {"torso", "arm_upper"}
+        assert (back["torso"] == a).all() and (back["arm_upper"] == b).all()
 
 
 def test_key_background_only_clears_the_background_touching_the_edges():

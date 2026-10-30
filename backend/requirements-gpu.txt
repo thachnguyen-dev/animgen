@@ -13,5 +13,7 @@ opencv-python-headless>=4.10
 timm>=1.0.9
 einops>=0.8
 kornia>=0.7
+# The Photoshop file of the body parts (parts.py):
+psd-tools==1.26.0
 # Only for scripts/download_models.py (installation time, with internet):
 huggingface_hub>=0.34

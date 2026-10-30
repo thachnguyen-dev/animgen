@@ -95,3 +95,7 @@ PowerShell scripts.
   knight: rig 133 s, A7 8 frames 3 s, one finished frame 23 s. Published to C:/AnimGen for the owner to test.
 - Then per-drawing redraw and owner editing (see DECISIONS.md): knight hand-only redraw 97 s (body kept), edit
   reload 2.7 s, A7 8/8 after the edit.
+- Body-part layers and Photoshop editing (DECISIONS.md "Body-part layers"): parts.py, rig.build_rig_from_layers,
+  session._make_layers / _import_psd, POST /rig/edit returns the PSD. New models sam2 and clothes-parsing (in
+  scripts/download_models.py); psd-tools in both requirements files. Real runs: knight 380 s for the layers from
+  an existing drawing, archer 328 s. Sheets in the session scratchpad only (test art).

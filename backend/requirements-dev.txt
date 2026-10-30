@@ -3,4 +3,5 @@ numpy>=1.26,<3
 pillow>=10.4
 opencv-python-headless>=4.10
 onnxruntime>=1.22
+psd-tools>=1.10
 pytest>=8
