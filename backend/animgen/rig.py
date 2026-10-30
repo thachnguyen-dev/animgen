@@ -32,6 +32,7 @@ All images are canvas-sized RGBA facing right (as the templates); skeletons are 
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import cv2
@@ -40,7 +41,7 @@ from PIL import Image
 
 from .cloth import Hanging, bend, find_hanging, ground_speed, simulate
 from .puppet import PART_GROW, _cut, _drop_specks, _reference_bones, _segment_distance, _similarity, _target_bones
-from .skeleton import NECK, Skeleton
+from .skeleton import LANK, NECK, RANK, Skeleton
 
 # Limb parts and the bones they hang on (names as puppet._target_bones).
 LIMBS = ("uarm", "larm", "uleg", "lleg", "uarm_far", "larm_far", "uleg_far", "lleg_far")
@@ -93,9 +94,10 @@ class Rig:
         return self.render_keep(target, swing, open_hands)[0]
 
     def render_keep(self, target: Skeleton, swing: dict[str, float] | None = None,
-                    open_hands: tuple = ()) -> tuple[Image.Image, np.ndarray]:
+                    open_hands: tuple = (), floor: float | None = None) -> tuple[Image.Image, np.ndarray]:
         """``render`` and a mask of where the head and the hands show in the frame (not where something covers
-        them), for the finishing pass."""
+        them), for the finishing pass. ``floor``: the ground line's y; a hanging part lies on it rather than through
+        it (a cape under a body fallen on its back)."""
         w, h = self.size
         out = np.zeros((h, w, 4), np.uint8)
         keep = np.zeros((h, w), bool)
@@ -114,6 +116,8 @@ class Rig:
                 if swing and swing.get(part.name):
                     verts = bend(verts, part, swing[part.name])
             moved = _deform(mesh, mats, (h, w), verts, mesh.rgba)
+            if floor is not None and mesh.hanging:
+                moved[int(math.ceil(floor)) + 1:] = 0
             if mesh.keep is not None:
                 held = _deform(mesh, mats, (h, w), verts, np.dstack([mesh.keep] * 4))[..., 3] > 127
                 keep = (keep & ~(moved[..., 3] > 127)) | held
@@ -128,7 +132,11 @@ class Rig:
         out: list[dict[str, float]] = [{} for _ in targets]
         frames = [_target_bones(t) for t in targets]
         figure = _figure_height(targets[0]) if targets else 0.0
-        speed = ground_speed(targets, figure) if figure else 0.0
+        # Only a cycle in place (walk, run) moves over the ground; a hit or a fall shifts the body and comes back.
+        speed = ground_speed(targets, figure) if figure and loop else 0.0
+        ground = max((y for t in targets for y in (t.points[RANK][1] if t.points[RANK] else None,
+                                                   t.points[LANK][1] if t.points[LANK] else None) if y is not None),
+                     default=None)
         for mesh in self.meshes:
             for part in mesh.hanging:
                 mats = [self._matrix(part.bone, part.bone, f) for f in frames]
@@ -136,7 +144,14 @@ class Rig:
                     continue
                 pivots = [m[:, :2] @ part.pivot + m[:, 2] for m in mats]
                 carried = [float(np.degrees(np.arctan2(m[1, 0], m[0, 0]))) for m in mats]
-                for i, angle in enumerate(simulate(pivots, carried, part, figure, speed, loop)):
+                angles = simulate(pivots, carried, part, figure, speed, loop, ground)
+                # A move that ends where it started (a hit, an attack) leaves the cloth hanging as it began, so the
+                # next animation starts from rest: it eases back over the last frames.
+                n = len(angles)
+                if not loop and n >= 4 and abs(carried[-1] - carried[0]) < SETTLE_TURN and                         float(np.linalg.norm(pivots[-1] - pivots[0])) < SETTLE_MOVE * figure:
+                    for k, wgt in ((n - 3, 1 / 3), (n - 2, 2 / 3), (n - 1, 1.0)):
+                        angles[k] = angles[k] * (1 - wgt) + angles[0] * wgt
+                for i, angle in enumerate(angles):
                     out[i][part.name] = angle
         return out
 
@@ -421,6 +436,8 @@ LAYER_GROUPS = (
     ("hair", (("hair", "head"),), "hair"),
     ("arm", (("arm_upper", "uarm"), ("arm_lower", "larm")), None),
 )
+SETTLE_TURN = 5.0         # degrees: a one-shot move whose carrying bone ends this close to where it began…
+SETTLE_MOVE = 0.03        # …and whose pivot ends this close (of the figure height) lets its cloth settle back
 HANG_TOP = 0.05           # of a hanging layer's length: its pivot is the middle of its pixels this close to its top
 
 

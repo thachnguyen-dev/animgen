@@ -80,6 +80,7 @@ RIG_STRENGTH = 0.6
 HAND_POSE = Pose(spine=2, head=0, r_sh=90, r_el=0, l_sh=-40, l_el=20, r_hip=28, r_knee=6, l_hip=-26, l_knee=10)
 HAND_PROMPT = "standing, arm outstretched forward, open palm, fingers spread"
 HAND_STRENGTH = 0.75
+LOOPING = ("idle", "walk", "run", "fall")      # animations that repeat (the others play once)
 HANGING_TINT = {"cape": (255, 140, 0), "skirt": (0, 160, 255), "hair": (200, 0, 255)}
 # The body-part layers (owner, 2026-10-31): one PNG per part, and the Photoshop file the owner corrects them in.
 LAYERS_DIR = "layers"
@@ -629,7 +630,7 @@ class Session:
                 self.slots[i].open_hands = tf.open_hands
             if self.rig is not None:
                 # The hanging parts swing over the whole animation, so their angles are worked out for all frames.
-                swings = self.rig.rig.swings([s.skeleton for s in self.slots], loop=template.animation != "attack")
+                swings = self.rig.rig.swings([s.skeleton for s in self.slots], loop=template.animation in LOOPING)
                 for slot, sw in zip(self.slots, swings):
                     slot.swing = {k: v for k, v in sw.items() if k not in self.rig.still}
         if self.rig is None or self.finished:
@@ -755,7 +756,7 @@ class Session:
         """One frame from the rig, with the finishing pass when it was asked for. Placed by the template already."""
         ch, state = self.character, self.rig
         assert ch is not None and state is not None and slot.skeleton is not None
-        image, keep = state.rig.render_keep(slot.skeleton, slot.swing, slot.open_hands)
+        image, keep = state.rig.render_keep(slot.skeleton, slot.swing, slot.open_hands, ch.placement.anchor[1])
         if not self.finished:
             return image
         return finish_frame(self.engine, image, keep, ch.placement.image, ch.skeleton, slot.skeleton,

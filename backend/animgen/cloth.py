@@ -116,11 +116,12 @@ def ground_speed(targets: list[Skeleton], figure: float) -> float:
 
 
 def simulate(pivots: list[np.ndarray], carried: list[float], hanging: Hanging, figure: float, speed: float,
-             loop: bool) -> list[float]:
+             loop: bool, ground: float | None = None) -> list[float]:
     """The part's swing angle in each frame, relative to the bone that carries it (what ``bend`` takes).
 
     ``pivots``: the pivot's position in each frame; ``carried``: how far the carrying bone turned from the bind pose
-    in each frame (degrees, same sign as the swing)."""
+    in each frame (degrees, same sign as the swing). ``ground``: the floor's y; a part hanging lower than the
+    floor lies on it instead (a body fallen on its back: the cape stays along it, not through the floor)."""
     n = len(pivots)
     if n == 0:
         return []
@@ -162,4 +163,18 @@ def simulate(pivots: list[np.ndarray], carried: list[float], hanging: Hanging, f
                 if not math.radians(lo) < phi < math.radians(hi):
                     phi = min(max(phi, math.radians(lo)), math.radians(hi))
                     rate = 0.0
+    if ground is not None:
+        out = [_on_floor(x, c, ground - float(q[1]), hanging.length) for x, c, q in zip(out, carried, p)]
     return [float(np.clip(math.degrees(x) - c, lo, hi)) for x, c in zip(out, carried)]
+
+
+def _on_floor(phi: float, carried: float, height: float, length: float) -> float:
+    """The swing (radians from straight down) turned up just enough that the hem, ``length`` from a pivot ``height``
+    above the floor, does not go below it; toward the carrying bone's side."""
+    if length <= 0 or height >= length:
+        return phi
+    least = math.acos(max(0.0, height) / length)
+    if abs(phi) >= least:
+        return phi
+    side = carried if abs(carried) > 1e-6 else math.degrees(phi)
+    return math.copysign(least, side)

@@ -33,6 +33,14 @@ def test_stopping_swings_the_cape_forward_a_little():
     assert max(angles[:4]) > 2 and min(angles[4:]) < max(angles[:4])
 
 
+def test_a_cape_near_the_floor_lies_on_it_along_the_body():
+    # The body lies on its back (the torso turned -90 degrees), the cape's pivot 50 px above the floor.
+    angles = simulate([np.array([480.0, 750.0])] * 8, [-90.0] * 8, cape(), FIG, 0.0, loop=False, ground=800.0)
+    for a in angles:
+        world = np.radians(a - 90.0)                     # the swing is relative to the turned body
+        assert 300.0 * np.cos(world) <= 50.0 + 1e-6      # the hem is not below the floor
+
+
 def test_bend_keeps_the_pivot_and_turns_the_hem():
     part = Hanging("cape", "torso", np.array([0.0, 0.0]), 100.0, np.array([0.0, 1.0]))
     out = bend(np.array([[0.0, 0.0], [0.0, 100.0]]), part, 90)
