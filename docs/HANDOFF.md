@@ -89,3 +89,7 @@ PowerShell scripts.
   head, hands and outline. GPU runs: C:/AnimGen/venv/Scripts/python.exe (the dev venv has no torch).
 - Next: integrate into the app: rig step (rig image + hand image, owner reviews/redraws), instant generation,
   "AI finishing" checkbox (off), hanging-part on/off in the skeleton editor; republish with the app closed.
+## App integration (2026-10-31)
+
+- Step 2 "Khung nhân vật" in the app (POST /rig, /rig/hanging; /generate takes `finish`). Real-engine check on the
+  knight: rig 133 s, A7 8 frames 3 s, one finished frame 23 s. Published to C:/AnimGen for the owner to test.

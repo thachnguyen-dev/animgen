@@ -94,6 +94,22 @@ public sealed class AnimationRef
     public string Grip { get; set; } = "never";
 }
 
+/// <summary>A hanging part of the rig (cape, skirt, long hair) and whether it swings.</summary>
+public sealed class HangingInfo
+{
+    public string Name { get; set; } = "";              // cape | skirt | hair
+    public bool On { get; set; }
+}
+
+/// <summary>The character's rig: the AI drawings every frame is made from (owner, 2026-10-30).</summary>
+public sealed class RigInfo
+{
+    public int Seed { get; set; }
+    public string? View { get; set; }                   // the assembled character, swinging parts tinted
+    public string? HandView { get; set; }               // the open-hand drawing
+    public List<HangingInfo> Hanging { get; set; } = new();
+}
+
 public sealed class SessionState
 {
     public string Engine { get; set; } = "";
@@ -102,6 +118,8 @@ public sealed class SessionState
     public CharacterInfo? Character { get; set; }
     public AnimationRef? Animation { get; set; }
     public bool Grip { get; set; }
+    public bool Finished { get; set; }                  // the frames had the AI finishing pass: they can be redrawn
+    public RigInfo? Rig { get; set; }
     public List<FrameState> Frames { get; set; } = new();
     public bool Complete { get; set; }
     public List<int> ExportHeights { get; set; } = new();

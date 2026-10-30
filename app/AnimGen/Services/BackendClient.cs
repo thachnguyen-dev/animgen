@@ -46,9 +46,16 @@ public sealed class BackendClient : IDisposable
     public Task<CharacterReply> ConfirmSkeletonAsync(IEnumerable<double[]?> points) =>
         PostAsync<CharacterReply>("character/skeleton", new { points = points.ToArray() });
 
+    /// <summary>The AI draws the character's rig and open-hand images (about two minutes).</summary>
+    public Task<TaskReply> MakeRigAsync(int? seed) => PostAsync<TaskReply>("rig", new { seed });
+
+    public Task<SessionState> SetHangingAsync(string name, bool on) =>
+        PostAsync<SessionState>("rig/hanging", new { name, on });
+
     /// <param name="grip">Hands closed around a weapon attached later; null where the animation decides.</param>
-    public Task<TaskReply> GenerateAsync(string animation, bool? grip) =>
-        PostAsync<TaskReply>("generate", new { animation, grip });
+    /// <param name="finish">The AI finishing pass (slower).</param>
+    public Task<TaskReply> GenerateAsync(string animation, bool? grip, bool finish) =>
+        PostAsync<TaskReply>("generate", new { animation, grip, finish });
 
     public Task<TaskReply> RegenerateAsync(int? frame) => PostAsync<TaskReply>("regenerate", new { frame });
     public Task<SessionState> AcceptAsync(int frame) => PostAsync<SessionState>("accept", new { frame });

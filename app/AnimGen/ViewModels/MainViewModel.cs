@@ -12,9 +12,42 @@ namespace AnimGen.ViewModels;
 /// <summary>Kinds of status line. Each one has its own icon and wording, not only its own colour (§11.1).</summary>
 public enum StatusKind { Info, Busy, Ok, Warning, Error }
 
+/// <summary>A hanging part the owner can stop from swinging (automatic detection, corrected by the owner).</summary>
+public sealed class HangingItem : ObservableObject
+{
+    private readonly Func<HangingItem, Task> _changed;
+    private bool _on;
+
+    public HangingItem(string name, bool on, Func<HangingItem, Task> changed)
+    {
+        Name = name;
+        _on = on;
+        _changed = changed;
+    }
+
+    public string Name { get; }
+
+    public string Label => Name switch
+    {
+        "cape" => "Phần sau lưng đung đưa (áo choàng…) — tô cam",
+        "skirt" => "Vạt dưới hông đung đưa (váy, vạt áo) — tô xanh",
+        "hair" => "Tóc dài đung đưa — tô tím",
+        _ => Name,
+    };
+
+    public bool On
+    {
+        get => _on;
+        set { if (Set(ref _on, value)) _ = _changed(this); }
+    }
+
+    /// <summary>The backend's value, without sending it back.</summary>
+    public void Load(bool on) => Set(ref _on, on, nameof(On));
+}
+
 /// <summary>
-/// The whole workflow of §11.2: choose the character, choose the animation (and whether the hands grip),
-/// generate, watch progress, preview, regenerate a frame or all and compare, export.
+/// The whole workflow of §11.2: choose the character, draw its rig, choose the animation (and whether the hands
+/// grip), generate, watch progress, preview, regenerate a finished frame or all and compare, export.
 /// </summary>
 public sealed class MainViewModel : ObservableObject
 {
@@ -31,11 +64,13 @@ public sealed class MainViewModel : ObservableObject
         ChooseCharacterCommand = new AsyncCommand(_ => ChooseCharacterAsync(), OnError, _ => Ready && !IsBusy);
         FlipFacingCommand = new AsyncCommand(_ => FlipFacingAsync(), OnError,
                                              _ => Ready && !IsBusy && _characterPath != null);
+        MakeRigCommand = new AsyncCommand(_ => MakeRigAsync(), OnError,
+                                          _ => Ready && !IsBusy && _skeleton is { Confirmed: true });
         GenerateCommand = new AsyncCommand(_ => GenerateAsync(), OnError, _ => CanGenerate);
         RegenerateAllCommand = new AsyncCommand(_ => RegenerateAsync(null), OnError,
-                                                _ => Ready && !IsBusy && HasFrames);
+                                                _ => Ready && !IsBusy && HasFrames && CanRedraw);
         RegenerateFrameCommand = new AsyncCommand(_ => RegenerateAsync(SelectedFrame?.Index), OnError,
-                                                  _ => Ready && !IsBusy && HasFrames && SelectedFrame != null);
+                                                  _ => Ready && !IsBusy && HasFrames && CanRedraw && SelectedFrame != null);
         AcceptCommand = new AsyncCommand(_ => AcceptAsync(true), OnError,
                                          _ => !IsBusy && SelectedFrame is { HasCandidate: true });
         KeepCommand = new AsyncCommand(_ => AcceptAsync(false), OnError,
@@ -101,6 +136,39 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>Raised after a character loads with a skeleton the owner has not confirmed yet.</summary>
     public event EventHandler? SkeletonCheckRequested;
+
+    // Step 2: the character's rig -------------------------------------------------------------------------------
+    private ImageSource? _rigImage;
+    public ImageSource? RigImage { get => _rigImage; private set => Set(ref _rigImage, value); }
+
+    private ImageSource? _handImage;
+    public ImageSource? HandImage { get => _handImage; private set => Set(ref _handImage, value); }
+
+    private bool _hasRig;
+    public bool HasRig
+    {
+        get => _hasRig;
+        private set { if (Set(ref _hasRig, value)) { Raise(nameof(RigText)); Raise(nameof(RigButtonText)); Raise(nameof(CanGenerate)); } }
+    }
+
+    public string RigText => HasRig
+        ? "Phần tô màu sẽ đung đưa khi chuyển động. Nếu hình vẽ sai (thiếu tay, chân lệch…), bấm “Vẽ lại”."
+        : "AI vẽ nhân vật một lần ở tư thế dang tay chân và một lần với bàn tay mở (khoảng 2 phút). Mọi khung hình được làm từ hai hình này.";
+
+    public string RigButtonText => HasRig ? "Vẽ lại khung nhân vật" : "Vẽ khung nhân vật";
+
+    public ObservableCollection<HangingItem> HangingParts { get; } = new();
+
+    private bool _hasHanging;
+    public bool HasHanging { get => _hasHanging; private set => Set(ref _hasHanging, value); }
+
+    /// <summary>The AI finishing pass (owner, 2026-10-30: optional, off by default).</summary>
+    private bool _finish;
+    public bool FinishWithAi { get => _finish; set => Set(ref _finish, value); }
+
+    /// <summary>Only finished frames can be redrawn: frames made from the rig come out the same every time.</summary>
+    private bool _canRedraw;
+    public bool CanRedraw { get => _canRedraw; private set => Set(ref _canRedraw, value); }
 
     private string _facingText = "";
     public string FacingText { get => _facingText; private set => Set(ref _facingText, value); }
@@ -185,10 +253,12 @@ public sealed class MainViewModel : ObservableObject
     public string FramesSummary { get => _framesSummary; private set => Set(ref _framesSummary, value); }
 
     public bool CanGenerate =>
-        Ready && !IsBusy && _characterPath != null && _skeleton is { Confirmed: true } && SelectedAnimation is { Ready: true };
+        Ready && !IsBusy && _characterPath != null && _skeleton is { Confirmed: true } && HasRig
+        && SelectedAnimation is { Ready: true };
 
     public ICommand ChooseCharacterCommand { get; }
     public ICommand FlipFacingCommand { get; }
+    public ICommand MakeRigCommand { get; }
     public ICommand GenerateCommand { get; }
     public ICommand RegenerateAllCommand { get; }
     public ICommand RegenerateFrameCommand { get; }
@@ -287,7 +357,8 @@ public sealed class MainViewModel : ObservableObject
         }
         else
         {
-            SetStatus(StatusKind.Ok, "Ảnh hợp lệ. Hãy chọn hoạt ảnh rồi bấm Tạo.");
+            SetStatus(StatusKind.Ok, HasRig ? "Ảnh hợp lệ. Hãy chọn hoạt ảnh rồi bấm Tạo."
+                                            : "Ảnh hợp lệ. Hãy vẽ khung nhân vật (bước 2).");
         }
     }
 
@@ -296,8 +367,52 @@ public sealed class MainViewModel : ObservableObject
     {
         Skeleton = r.Character?.Skeleton;
         if (r.State != null) ApplyState(r.State);
-        SetStatus(StatusKind.Ok, "Đã xác nhận khung xương. Hãy chọn hoạt ảnh rồi bấm Tạo.");
+        SetStatus(StatusKind.Ok, HasRig ? "Đã xác nhận khung xương. Hãy chọn hoạt ảnh rồi bấm Tạo."
+                                        : "Đã xác nhận khung xương. Hãy vẽ khung nhân vật (bước 2).");
         CommandManager.InvalidateRequerySuggested();
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // Step 2: rig
+    // ---------------------------------------------------------------------------------------------------------
+    private async Task MakeRigAsync()
+    {
+        if (_api == null) return;
+        StopPlay();
+        TaskReply r = await _api.MakeRigAsync(null);
+        await RunTaskAsync(r.Task!);
+    }
+
+    private async Task HangingChangedAsync(HangingItem item)
+    {
+        if (_api == null) return;
+        try
+        {
+            ApplyState(await _api.SetHangingAsync(item.Name, item.On));
+            SetStatus(StatusKind.Ok, item.On ? "Phần này sẽ đung đưa." : "Phần này sẽ đứng yên như hình vẽ.");
+        }
+        catch (BackendException ex)
+        {
+            SetStatus(StatusKind.Error, ex.Message);
+        }
+    }
+
+    private void ApplyRig(RigInfo? rig)
+    {
+        HasRig = rig != null;
+        RigImage = rig?.View != null ? FrameItem.Load(rig.View) : null;
+        HandImage = rig?.HandView != null ? FrameItem.Load(rig.HandView) : null;
+        var parts = rig?.Hanging ?? new List<HangingInfo>();
+        if (!parts.Select(p => p.Name).SequenceEqual(HangingParts.Select(h => h.Name)))
+        {
+            HangingParts.Clear();
+            foreach (HangingInfo p in parts) HangingParts.Add(new HangingItem(p.Name, p.On, HangingChangedAsync));
+        }
+        else
+        {
+            for (int i = 0; i < parts.Count; i++) HangingParts[i].Load(parts[i].On);
+        }
+        HasHanging = HangingParts.Count > 0;
     }
 
     // ---------------------------------------------------------------------------------------------------------
@@ -307,7 +422,7 @@ public sealed class MainViewModel : ObservableObject
     {
         if (_api == null || SelectedAnimation == null) return;
         StopPlay();
-        TaskReply r = await _api.GenerateAsync(SelectedAnimation.Id, ShowGrip ? Grip : null);
+        TaskReply r = await _api.GenerateAsync(SelectedAnimation.Id, ShowGrip ? Grip : null, FinishWithAi);
         await RunTaskAsync(r.Task!);
     }
 
@@ -387,6 +502,10 @@ public sealed class MainViewModel : ObservableObject
                 SetStatus(StatusKind.Busy, "Đang tải mô hình… (lần tạo đầu tiên mất thêm 1–2 phút)");
                 ProgressText = t.Message;
                 break;
+            case "generating" when t.Kind == "rig":
+                SetStatus(StatusKind.Busy, "Đang vẽ khung nhân vật…");
+                ProgressText = t.Message;
+                break;
             case "generating":
                 SetStatus(StatusKind.Busy, "Đang tạo…");
                 ProgressText = $"Khung {t.Frame} / 8";
@@ -407,6 +526,12 @@ public sealed class MainViewModel : ObservableObject
         bool export = t.Kind == "export";
         switch (t.State)
         {
+            case "completed" when t.Kind == "rig":
+                SetStatus(StatusKind.Ok, "Đã vẽ khung nhân vật. Kiểm tra hình ở bước 2, rồi chọn hoạt ảnh và bấm Tạo.");
+                return;
+            case "failed" when t.Kind == "rig":
+                SetStatus(StatusKind.Error, $"Vẽ khung nhân vật thất bại: {t.Error?.Message ?? "Lỗi không rõ."}");
+                return;
             case "completed" when export:
                 SetStatus(StatusKind.Ok, $"Đã xuất xong 8 khung và sprite sheet vào: {ExportFolder}");
                 break;
@@ -438,6 +563,8 @@ public sealed class MainViewModel : ObservableObject
     {
         _lastState = s;
         IsDemo = s.Demo;
+        ApplyRig(s.Rig);
+        CanRedraw = s.Finished;
         for (int i = 0; i < Frames.Count && i < s.Frames.Count; i++) Frames[i].Update(s.Frames[i]);
         HasFrames = Frames.Any(f => f.Image != null);
         _complete = s.Complete;

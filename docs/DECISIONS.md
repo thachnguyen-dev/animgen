@@ -259,6 +259,14 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   and the outline is clipped to the rig frame's (3 px slack, none near head and hands): even at 0.3 the drawer
   opened fists and painted fingers around them (archer test). A frame without an open hand drops "open palm" from
   its prompt. About 25 s per frame on the RTX 4060.
+- App integration (mine, owner said "go ahead", 2026-10-31): a new step 2 "Khung nhân vật" after the skeleton.
+  The AI draws the rig and open-hand images once per character image (about 2 minutes, saved per image, reused
+  while the confirmed skeleton is unchanged); the owner reviews both and can redraw. Generate requires a rig and
+  takes seconds; the checkbox "Hoàn thiện bằng AI" (off) adds the finishing pass (about 25 s per frame). Rig frames
+  come out the same every time, so regenerate/compare is offered only for finished frames.
+- Hanging-part toggles sit in step 2, not in the skeleton editor as first proposed: the parts are detected from the
+  rig, which does not exist yet when the skeleton is confirmed. Turned-off parts stay as drawn.
+- The app no longer uses the per-frame diffusion path; it stays in the backend for dev scripts (phase0).
 
 ## Not done on purpose
 

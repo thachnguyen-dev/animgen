@@ -132,7 +132,7 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- Left: steps 1–4 -->
+            <!-- Left: steps 1–5 -->
             <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <Border Style="{StaticResource Panel}">
@@ -158,9 +158,38 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Step 2: the character's rig, drawn once by the AI; every frame is made from it -->
                     <Border Style="{StaticResource Panel}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource TextTitle}" Text="2. Hoạt ảnh"/>
+                            <TextBlock Style="{StaticResource TextTitle}" Text="2. Khung nhân vật"/>
+                            <Button Content="{Binding RigButtonText}" Command="{Binding MakeRigCommand}" HorizontalAlignment="Left"/>
+                            <UniformGrid Columns="2" Visibility="{Binding HasRig, Converter={StaticResource BoolToVis}}">
+                                <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeThumb}"
+                                        BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}">
+                                    <Image Source="{Binding RigImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                                           AutomationProperties.Name="Khung nhân vật"/>
+                                </Border>
+                                <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeThumb}"
+                                        BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}">
+                                    <Image Source="{Binding HandImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                                           AutomationProperties.Name="Bàn tay mở"/>
+                                </Border>
+                            </UniformGrid>
+                            <ItemsControl ItemsSource="{Binding HangingParts}"
+                                          Visibility="{Binding HasHanging, Converter={StaticResource BoolToVis}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding Label}" IsChecked="{Binding On}"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="{Binding RigText}" Style="{StaticResource TextMuted}" Margin="{StaticResource SpaceGap}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Panel}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource TextTitle}" Text="3. Hoạt ảnh"/>
                             <ComboBox ItemsSource="{Binding Animations}" SelectedItem="{Binding SelectedAnimation}"
                                       AutomationProperties.Name="Hoạt ảnh">
                                 <ComboBox.ItemContainerStyle>
@@ -189,12 +218,13 @@
 
                             <CheckBox Content="Tay nắm (để gắn vũ khí trong game)" IsChecked="{Binding Grip}"
                                       Visibility="{Binding ShowGrip, Converter={StaticResource BoolToVis}}"/>
+                            <CheckBox Content="Hoàn thiện bằng AI (chậm hơn, khoảng 25 giây mỗi khung)" IsChecked="{Binding FinishWithAi}"/>
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource Panel}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource TextTitle}" Text="3. Tạo"/>
+                            <TextBlock Style="{StaticResource TextTitle}" Text="4. Tạo"/>
                             <Button Style="{StaticResource ButtonPrimary}" Command="{Binding GenerateCommand}" HorizontalAlignment="Stretch">
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Style="{StaticResource TextIcon}" Text="{StaticResource GlyphGenerate}" Foreground="{StaticResource BrushSurface}"/>
@@ -211,7 +241,7 @@
 
                     <Border Style="{StaticResource Panel}">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource TextTitle}" Text="4. Xuất"/>
+                            <TextBlock Style="{StaticResource TextTitle}" Text="5. Xuất"/>
                             <TextBlock Text="Chiều cao khung (px)" FontWeight="SemiBold" Margin="0,0,0,4"/>
                             <ComboBox ItemsSource="{Binding ExportHeights}" SelectedItem="{Binding ExportHeight}"
                                       AutomationProperties.Name="Chiều cao khung"/>
@@ -254,7 +284,9 @@
                 <Border DockPanel.Dock="Bottom" Style="{StaticResource Panel}" Margin="0">
                     <StackPanel>
                         <DockPanel Margin="{StaticResource SpaceGap}">
-                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <!-- Only frames repainted by the AI can be redrawn; frames from the rig are the same every time -->
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                        Visibility="{Binding CanRedraw, Converter={StaticResource BoolToVis}}">
                                 <Button Style="{StaticResource ButtonRegenerate}" Command="{Binding RegenerateFrameCommand}" Margin="{StaticResource SpaceRight}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Style="{StaticResource TextIcon}" Text="{StaticResource GlyphRegenerate}" Foreground="{StaticResource BrushAccentHover}"/>
@@ -279,7 +311,8 @@
                                 </ItemsControl.ItemsPanel>
                             </ItemsControl>
                         </ScrollViewer>
-                        <Button Content="Dùng tất cả bản mới" Command="{Binding AcceptAllCommand}" HorizontalAlignment="Left"/>
+                        <Button Content="Dùng tất cả bản mới" Command="{Binding AcceptAllCommand}" HorizontalAlignment="Left"
+                                Visibility="{Binding CanRedraw, Converter={StaticResource BoolToVis}}"/>
                     </StackPanel>
                 </Border>
 
