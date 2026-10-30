@@ -343,7 +343,7 @@ class Session:
             req = FrameRequest(reference=ch.placement.image, reference_skeleton=ch.skeleton,
                                target_skeleton=slot.skeleton, background=self.background, prompt=tpl.prompt,
                                seed=(self.run_seed + i * 7919 + attempt * 104729) % (2**31 - 1),
-                               hands_gripping=self.weapon is not None or tpl.weapon == "required",
+                               hands_gripping=self.weapon is not None or tpl.armed_attack,
                                extra={"frame_index": i, "template": tpl.id})
             try:
                 rgb = self.engine.drawer.draw(req)
@@ -480,8 +480,40 @@ class Session:
             wname, sname = w.name, w.skin(self.weapon.skin).name
         name = export_mod.base_name(self.character.name, anim, wname, sname)
         paths = export_mod.export_animation(frames, out_dir, height, name,
-                                            progress=lambda d, t: task.update(done=d, total=t))
+                                            progress=lambda d, t: task.update(done=d, total=t),
+                                            anchors=self.weapon_anchors(height))
         return {"files": [str(p) for p in paths], "folder": str(Path(out_dir)), "height": height}
+
+    def weapon_anchors(self, height: int) -> dict | None:
+        """Where the weapon hand is in each exported frame, for attaching a weapon in the game; None for animations
+        without weapon poses (the unarmed attacks)."""
+        tpl, ch = self.template, self.character
+        if tpl is None or ch is None or not any(f.weapon for f in tpl.frames):
+            return None
+        canvas = ch.placement.image.width
+        k = height / canvas
+        frames = []
+        for i, (tf, slot) in enumerate(zip(tpl.frames, self.slots)):
+            wp = tf.weapon
+            hand = hand_point(slot.skeleton, wp.hand) if wp is not None and slot.skeleton is not None else None
+            if wp is None or hand is None:
+                frames.append({"index": i + 1, "weapon": False})
+                continue
+            x, y, angle = hand[0], hand[1], wp.angle
+            if ch.placement.mirrored:      # back to the character's own facing, as the frames are exported
+                x, angle = canvas - 1 - x, 180.0 - angle
+            frames.append({"index": i + 1, "weapon": True, "x": round(x * k, 2), "y": round(y * k, 2),
+                           "angle": round((angle + 180.0) % 360.0 - 180.0, 2), "layer": wp.layer,
+                           "bow_stage": wp.stage, "hand": "right" if wp.hand == "r" else "left"})
+        return {
+            "frame_size": [height, height],
+            "weapon_scale": round(ch.placement.scale * k, 5),
+            "about": "x, y: the middle of the weapon hand, pixels from the frame's top left. angle: degrees from the "
+                     "grip towards the tip, 0 = pointing right, 90 = pointing down (in Unity, z rotation = -angle). "
+                     "layer: weapon in front of or behind the character. weapon_scale: multiply a weapon drawn at "
+                     "the character image's pixel scale by this. hand: the character's own hand.",
+            "frames": frames,
+        }
 
     # ------------------------------------------------------------------------------------------------------------
     def state(self) -> dict:

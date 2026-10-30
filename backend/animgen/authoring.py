@@ -243,11 +243,11 @@ TEMPLATES = {
                 prompt="punching, fighting stance, clenched hands"),
     "a1b": dict(fn=a1b, animation="attack", variant="a1b", name_vi="Tay không — đá", weapon="never", kinds=[],
                 prompt="kicking, fighting stance"),
-    "a2": dict(fn=a2, animation="attack", variant="a2", name_vi="Vũ khí một tay", weapon="required",
+    "a2": dict(fn=a2, animation="attack", variant="a2", name_vi="Vũ khí một tay", weapon="optional",
                kinds=["one_handed"], prompt="attacking, swinging arm, clenched hand"),
-    "a5": dict(fn=a5, animation="attack", variant="a5", name_vi="Cung", weapon="required", kinds=["bow"],
+    "a5": dict(fn=a5, animation="attack", variant="a5", name_vi="Cung", weapon="optional", kinds=["bow"],
                prompt="archery stance, aiming, arms raised, clenched hands"),
-    "a6": dict(fn=a6, animation="attack", variant="a6", name_vi="Gậy phép", weapon="required", kinds=["staff"],
+    "a6": dict(fn=a6, animation="attack", variant="a6", name_vi="Gậy phép", weapon="optional", kinds=["staff"],
                prompt="casting, raising arm, clenched hand"),
 }
 

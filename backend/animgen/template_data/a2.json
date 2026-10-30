@@ -4,7 +4,7 @@
  "variant": "a2",
  "name_vi": "Vũ khí một tay",
  "status": "Proposed",
- "weapon": "required",
+ "weapon": "optional",
  "weapon_kinds": [
   "one_handed"
  ],

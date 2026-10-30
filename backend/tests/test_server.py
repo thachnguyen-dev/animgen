@@ -93,8 +93,8 @@ def test_full_flow(server, tmp_path):
     assert st == 200 and Path(pv["path"]).is_file()
 
     # a bad choice fails at once with a Vietnamese message
-    st, err = call(server, "POST", "/generate", {"animation": "a2"})
-    assert st == 400 and err["error"]["code"] == "weapon_required" and "vũ khí" in err["error"]["message"]
+    st, err = call(server, "POST", "/generate", {"animation": "a1a", "weapon": {"weapon_id": w["id"]}})
+    assert st == 400 and err["error"]["code"] == "weapon_not_allowed" and "vũ khí" in err["error"]["message"]
 
     st, r = call(server, "POST", "/generate", {"animation": "a2", "weapon": {"weapon_id": w["id"]}})
     assert st == 200
@@ -118,7 +118,8 @@ def test_full_flow(server, tmp_path):
     assert st == 400 and err["error"]["code"] == "export_bad_size"
     st, r = call(server, "POST", "/export", {"folder": str(tmp_path / "out"), "height": 256})
     task = wait_task(server, r["task"]["id"])
-    assert task["state"] == "completed" and len(task["result"]["files"]) == 9
+    files = task["result"]["files"]     # 8 frames, the sheet and the weapon hand positions
+    assert task["state"] == "completed" and len(files) == 10 and files[-1].endswith("_weapon.json")
 
 
 def test_bad_json_and_unknown_route(server):

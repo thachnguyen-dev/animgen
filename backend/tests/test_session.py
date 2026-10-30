@@ -118,9 +118,7 @@ def test_cancel_between_frames(session, hero):
 def test_weapon_rules(session, hero, tmp_path):
     session.set_character(str(hero))
     w = add_sword(session, tmp_path)
-    with pytest.raises(AppError) as e:
-        session.prepare("a2", None)
-    assert e.value.code == "weapon_required"
+    assert session.prepare("a2", None).id == "a2"       # weapons are optional: they can be attached in the game
     with pytest.raises(AppError) as e:
         session.prepare("a1a", WeaponChoice(w.id, None))
     assert e.value.code == "weapon_not_allowed"
@@ -183,6 +181,40 @@ def test_export_names_with_weapon(session, hero, tmp_path):
     names = sorted(Path(p).name for p in t.result["files"])
     assert names[0] == "hiep-si_attack-a2_kiem_bac_01.png"
     assert "hiep-si_attack-a2_kiem_bac_sheet.png" in names
+
+
+def test_armed_attack_without_weapon_grips_and_exports_hand_anchors(session, tmp_path):
+    import json
+    from animgen.weapons import hand_point
+    left = synth.character(tmp_path / "left.png", facing="left")
+    session.set_character(str(left), "left", name="Cung thủ")
+    seen = []
+    draw = session.engine.drawer.draw
+    session.engine.drawer.draw = lambda req: seen.append(req.hands_gripping) or draw(req)
+    run(lambda task: session.generate(task, "a5", None))
+    assert seen and all(seen)                             # hands closed as if holding the bow
+    t = run(lambda task: session.export(task, str(tmp_path / "out"), 256))
+    assert t.state == "completed", t.error
+    js = [p for p in t.result["files"] if p.endswith("_weapon.json")]
+    assert len(js) == 1
+    data = json.load(open(js[0], encoding="utf-8"))
+    assert data["frame_size"] == [256, 256] and len(data["frames"]) == 8
+    canvas = session.character.placement.image.width
+    k = 256 / canvas
+    tpl = session.template
+    for f, tf, slot in zip(data["frames"], tpl.frames, session.slots):
+        assert f["weapon"]
+        hx, hy = hand_point(slot.skeleton, tf.weapon.hand)
+        assert f["x"] == pytest.approx((canvas - 1 - hx) * k, abs=0.02)   # mirrored back: the character faces left
+        assert f["y"] == pytest.approx(hy * k, abs=0.02)
+        assert f["angle"] == pytest.approx((180.0 - tf.weapon.angle + 180.0) % 360.0 - 180.0, abs=0.02)
+
+
+def test_no_hand_anchors_for_unarmed_animations(session, hero, tmp_path):
+    session.set_character(str(hero))
+    run(lambda task: session.generate(task, "a1a", None))
+    t = run(lambda task: session.export(task, str(tmp_path / "out"), 128))
+    assert not any(p.endswith(".json") for p in t.result["files"])
 
 
 def test_temp_folder_cleanup(tmp_path):

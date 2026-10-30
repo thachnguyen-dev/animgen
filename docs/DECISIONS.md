@@ -97,6 +97,24 @@ Labels: **Owner** = chosen by the owner in this session. **Decided** = decided b
   0.6, with the same poses — **now the default**. Strength 0.5 changed little. Style tags ("thick outlines, bold
   lineart") gave the boldest lines but would force one line style on every character, so they are not used.
 
+## Western test set (2026-10-30, owner: "prepare temporary images yourself")
+
+The owner's old art is semi-realistic western (armoured knight with cape, bearded archer with quiver, often a
+three-quarter view), harder than the first anime test character. Temporary set made with Animagine
+(`dev/tools/make_temp_art.py`): knight with cape, archer with quiver, the archer in three-quarter view, a mage in a
+long robe, a staff. Two faults found and fixed:
+
+- **Puppet cut.** Each pixel went to the nearest bone, and arms got extra reach. On the knight the arm (hanging along
+  the back) took most of the cape and a strip of the breastplate: in Run and A2 the cape tore into strips flying with
+  the arms, and the strip was painted as a "tassel" in the hand. Now limbs keep only pixels within a limb's width of
+  their bone (`LIMB_REACH`; the lower leg also keeps the foot, `FOOT_REACH`); capes, robes and quivers stay with the
+  torso. Loose specks are dropped from the rough image. Tests in `tests/test_puppet.py`; viewer `dev/tools/puppet_labels.py`.
+- **Who is drawn.** The prompt named nothing about the character, so the male knight drifted towards a female
+  figure. Now a tagger (WD ViT tagger v3, Apache-2.0, 378 MB ONNX on the CPU) reads the reference once per character
+  and the appearance tags ("1boy, beard, quiver, blue robe" …) go into the prompt, trimmed to CLIP's 77 tokens;
+  pose, view, background and anything held are filtered out. Optional: an install without it draws as before.
+  First result with both fixes (archer Idle and bow): the same man in every frame.
+
 ## Input images: separate character and weapons (tested 2026-10-30) — Recommended to the owner
 
 - Test: the same pipeline with a temporary character already holding a sword (`dev/test_art/test_hero_sword.png`)

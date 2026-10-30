@@ -139,7 +139,7 @@ public sealed class MainViewModel : ObservableObject
         null => "",
         { Ready: false } => "Hoạt ảnh này chưa có trong phiên bản này.",
         { Weapon: "required" } => "Cần chọn vũ khí phù hợp.",
-        { Weapon: "optional" } => "Vũ khí là tuỳ chọn.",
+        { Weapon: "optional" } => "Vũ khí là tuỳ chọn. Khi xuất có kèm tệp vị trí tay cầm (…_weapon.json) để gắn vũ khí trong game.",
         _ => "Không dùng vũ khí.",
     };
 

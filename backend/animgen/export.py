@@ -3,12 +3,15 @@
 Sheet layout (Proposed, cut C8): one row, 8 frames in play order, no padding, each cell exactly the frame size.
 Unity: Sprite Mode Multiple, Sprite Editor > Slice > Grid By Cell Count, 1 row x 8 columns.
 File names (Proposed, §10.3): ``<character>_<animation>[_<weapon>_<skin>]_<01-08>.png`` and ``..._sheet.png``.
+Armed animations also get ``..._weapon.json``: where the weapon hand is in every frame, so a weapon can be attached
+in the game instead of (or as well as) being drawn in (owner's note, 2026-10-30).
 Files are written to a hidden folder first, checked, then moved into place, so a failed export never leaves a
 mix of old and new files that looks complete.
 """
 
 from __future__ import annotations
 
+import json
 import shutil
 import uuid
 from pathlib import Path
@@ -40,7 +43,7 @@ def sprite_sheet(frames: list[Image.Image]) -> Image.Image:
 
 
 def export_animation(frames: list[Image.Image], out_dir: str | Path, height: int, name: str,
-                     progress=None) -> list[Path]:
+                     progress=None, anchors: dict | None = None) -> list[Path]:
     if len(frames) != config.FRAME_COUNT or any(f is None for f in frames):
         raise AppError("export_incomplete")
     if height not in config.EXPORT_HEIGHTS:
@@ -69,6 +72,12 @@ def export_animation(frames: list[Image.Image], out_dir: str | Path, height: int
         sname = f"{name}_sheet.png"
         sheet.save(staging / sname, format="PNG")
         written.append((staging / sname, out / sname, sheet.size))
+        data: list[tuple[Path, Path]] = []
+        if anchors is not None:
+            jname = f"{name}_weapon.json"
+            with open(staging / jname, "w", encoding="utf-8") as f:
+                json.dump(anchors, f, ensure_ascii=False, indent=1)
+            data.append((staging / jname, out / jname))
     except OSError as exc:
         shutil.rmtree(staging, ignore_errors=True)
         raise AppError("export_write_failed", detail=str(exc)) from exc
@@ -79,7 +88,7 @@ def export_animation(frames: list[Image.Image], out_dir: str | Path, height: int
             shutil.rmtree(staging, ignore_errors=True)
             raise AppError("export_verify_failed", detail=f"{tmp.name}: {chk.reason}")
     try:
-        for tmp, final, _ in written:
+        for tmp, final in [(t, f) for t, f, _ in written] + data:
             tmp.replace(final)
     except OSError as exc:
         raise AppError("export_write_failed", detail=str(exc)) from exc
@@ -87,4 +96,4 @@ def export_animation(frames: list[Image.Image], out_dir: str | Path, height: int
         shutil.rmtree(staging, ignore_errors=True)
     if progress:
         progress(config.FRAME_COUNT + 1, config.FRAME_COUNT + 1)
-    return [final for _, final, _ in written]
+    return [final for _, final, _ in written] + [final for _, final in data]

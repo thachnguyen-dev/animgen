@@ -84,6 +84,11 @@ class MotionTemplate:
     frames: list[TemplateFrame]
 
     @property
+    def armed_attack(self) -> bool:
+        """An attack made for a weapon (sword, bow, staff): the hands grip even when no weapon is drawn in."""
+        return self.animation == "attack" and bool(self.weapon_kinds)
+
+    @property
     def armed_capable(self) -> bool:
         return self.weapon in ("optional", "required")
 

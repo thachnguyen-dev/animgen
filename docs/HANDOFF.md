@@ -53,3 +53,14 @@ recommendation (separate vs combined) after testing.
 No GPU there: the real engine, Phase 0 and all tuning need the owner's PC. Code-only work (step 3 of Next steps) and the test
 suite (`backend/requirements-dev.txt`, `pytest`) run anywhere. Keep CRLF line endings and UTF-8 with BOM for
 PowerShell scripts.
+
+## Paused 2026-10-30 (second pause)
+
+- Weapons are optional in every attack (a2/a5/a6 "optional"); armed attacks still grip; export writes `<name>_weapon.json`
+  with per-frame hand anchors (x/y in exported pixels, angle, layer, bow stage), mirrored for left-facing characters.
+  Built-in weapon compositing is kept. Tests: 102 passed before the pause (only an app note string changed after).
+- Open: left/right limb accuracy (owner saw frames where the model swaps the character's left and right). Templates
+  are correct (dev/tools/template_sheet.py). Next: `dev/tools/ab_run.py` on walk/run with variants base / far=0.5 /
+  cn=1.0 / str=0.5, judged with `dev/tools/lr_sheet.py`.
+- Western batch stopped at the pause: knight (old code), archer, archer34 done; mage and hero not run.
+- The published C:/AnimGen backend is outdated (no tagger, puppet fixes, weapon anchors): republish with the app closed.

@@ -1,6 +1,6 @@
 """A/B variants of the real engine on one animation, one model load.
 usage: python ab_run.py <character.png> <animation> <out_dir> <variant>...
-variant = name:ip=<scale>:cn=<scale>:str=<strength>:steps=<n>:style=<extra positive tags, '+' for spaces/commas>
+variant = name:ip=<scale>:cn=<scale>:str=<strength>:far=<far limb darkening>:steps=<n>:style=<extra positive tags, '+' for spaces/commas>
 """
 import json
 import sys
@@ -9,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, r"D:\Game\ainm\animgen\backend")
 import animgen.engines.diffusers_engine as de  # noqa: E402
+import animgen.puppet as puppet  # noqa: E402
 from animgen.server import make_engine  # noqa: E402
 from animgen.session import Session  # noqa: E402
 from animgen.tasks import TaskRunner  # noqa: E402
@@ -16,7 +17,7 @@ from animgen.tasks import TaskRunner  # noqa: E402
 char, anim, out = sys.argv[1], sys.argv[2], Path(sys.argv[3])
 out.mkdir(parents=True, exist_ok=True)
 base_positive = de.POSITIVE
-DEFAULTS = {"steps": de.STEPS, "cn": de.CONTROL_SCALE, "ip": de.IP_ADAPTER_SCALE, "str": de.STRENGTH}
+DEFAULTS = {"steps": de.STEPS, "cn": de.CONTROL_SCALE, "ip": de.IP_ADAPTER_SCALE, "str": de.STRENGTH, "far": puppet.FAR_DARKEN}
 engine = make_engine("diffusers", Path(r"C:\AnimGen\models"))
 RAW = {"dir": out, "n": 0}
 
@@ -57,6 +58,7 @@ for spec in sys.argv[4:]:
     de.CONTROL_SCALE = float(o.get("cn", DEFAULTS["cn"]))
     de.IP_ADAPTER_SCALE = float(o.get("ip", DEFAULTS["ip"]))
     de.STRENGTH = float(o.get("str", DEFAULTS["str"]))
+    puppet.FAR_DARKEN = float(o.get("far", DEFAULTS["far"]))
     style = o.get("style", "").replace("+", " ").replace("|", ", ")
     de.POSITIVE = base_positive.replace("{motion}, ", "{motion}, " + (style + ", " if style else ""))
     RAW["tag"], RAW["n"] = name, 0
