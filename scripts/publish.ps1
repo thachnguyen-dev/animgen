@@ -25,7 +25,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $Data 'backend') | Out-Null
 Copy-Item (Join-Path $repo 'backend\animgen') $dst -Recurse
 Get-ChildItem $dst -Recurse -Directory -Filter '__pycache__' | Remove-Item -Recurse -Force
 
-foreach ($d in 'weapons', 'temp', 'logs') { New-Item -ItemType Directory -Force -Path (Join-Path $Data $d) | Out-Null }
+foreach ($d in 'temp', 'logs') { New-Item -ItemType Directory -Force -Path (Join-Path $Data $d) | Out-Null }
 
 # Shortcut-friendly launchers
 Set-Content -Path (Join-Path $Data 'AnimGen.cmd') -Value "@start """" ""%~dp0app\AnimGen.exe""" -Encoding ASCII
