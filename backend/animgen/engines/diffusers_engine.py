@@ -27,6 +27,7 @@ All values marked TUNE are Proposed starting points for Phase 0.
 from __future__ import annotations
 
 import gc
+import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -36,6 +37,7 @@ from ..puppet import repose
 from ..skeleton import Skeleton, draw_openpose
 from .base import Engine, EngineError, FrameRequest, ProgressFn
 from .dwpose import DWPoseReader
+from .tagger import WDTagger
 
 STEPS = 28                      # TUNE (with STRENGTH 0.6 about 17 of them run)
 STRENGTH = 0.6                  # TUNE: share of the rough repose that is repainted. Probes: 0.45 leaves cut seams,
@@ -54,7 +56,7 @@ DRAW_SIZE = 768
 BACKGROUND_WORDS = {(255, 255, 255): "white background", (128, 128, 128): "grey background",
                     (40, 40, 40): "black background"}
 # Templates face right, and the reference panel shows the character facing right (§ Facing in DECISIONS.md).
-POSITIVE = ("solo, full body, from side, profile, facing right, {motion}, {hands}simple background, {bg}, "
+POSITIVE = ("solo, {look}full body, from side, profile, facing right, {motion}, {hands}simple background, {bg}, "
             "masterpiece, high score, great score, absurdres")
 # Phase 0 on test art (2026-10-30): frames turned away or faced left, and one held a second, faint figure.
 NEGATIVE = ("lowres, bad anatomy, bad hands, missing fingers, extra digits, fewer digits, extra arms, extra legs, "
@@ -138,6 +140,25 @@ class SDXLDrawer:
     def __init__(self, models: Path) -> None:
         self.models = models
         self.pipe = None
+        # The character's look as tags, read once per reference (see tagger.py). An install without the tagger
+        # still draws, as before it was added.
+        self.tagger = WDTagger(models / "wd-tagger")
+        self._looks: dict[str, list[str]] = {}
+
+    def look(self, reference: Image.Image) -> list[str]:
+        key = hashlib.sha256(reference.tobytes()).hexdigest()
+        if key not in self._looks:
+            self._looks[key] = self.tagger.tags(reference) if self.tagger.available() else []
+        return self._looks[key]
+
+    def _prompt(self, look: list[str], **words: str) -> str:
+        """POSITIVE with as many look tags as fit CLIP's 77 tokens (the rest of the prompt is never cut)."""
+        tags = list(look)
+        while True:
+            prompt = POSITIVE.format(look="".join(t + ", " for t in tags), **words)
+            if not tags or self.pipe is None or len(self.pipe.tokenizer(prompt).input_ids) <= 77:
+                return prompt
+            tags.pop()
 
     def load(self, progress: ProgressFn | None) -> None:
         import torch
@@ -179,14 +200,14 @@ class SDXLDrawer:
     def draw(self, req: FrameRequest) -> Image.Image:
         canvas_size = req.reference.size[0]
         if canvas_size == DRAW_SIZE:
-            return self._draw(req)
+            return self._draw(req, self.look(req.reference))
         k = DRAW_SIZE / canvas_size
         small = FrameRequest(req.reference.resize((DRAW_SIZE, DRAW_SIZE), Image.Resampling.LANCZOS),
                              _scaled(req.reference_skeleton, k), _scaled(req.target_skeleton, k), req.background,
                              req.prompt, req.seed, req.hands_gripping, req.extra)
-        return self._draw(small).resize((canvas_size, canvas_size), Image.Resampling.LANCZOS)
+        return self._draw(small, self.look(req.reference)).resize((canvas_size, canvas_size), Image.Resampling.LANCZOS)
 
-    def _draw(self, req: FrameRequest) -> Image.Image:
+    def _draw(self, req: FrameRequest, look: list[str]) -> Image.Image:
         import torch
         if self.pipe is None:
             raise EngineError("inference", "models not loaded")
@@ -216,8 +237,8 @@ class SDXLDrawer:
             pose = draw_openpose(req.target_skeleton, (size, size))
 
         hands = "clenched hands, empty hands, " if req.hands_gripping else ""
-        prompt = POSITIVE.format(motion=req.prompt or "standing", hands=hands,
-                                 bg=BACKGROUND_WORDS.get(tuple(bg), "plain background"))
+        prompt = self._prompt(look, motion=req.prompt or "standing", hands=hands,
+                              bg=BACKGROUND_WORDS.get(tuple(bg), "plain background"))
         negative = NEGATIVE.format(weapon="weapon, holding weapon, holding, sword, dagger, knife, shield, bow, staff, effects")
         gen = torch.Generator(device="cpu").manual_seed(int(req.seed))
         try:

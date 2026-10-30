@@ -33,6 +33,8 @@ MODELS = [
     ("birefnet", "ZhengPeng7/BiRefNet", ["*.json", "*.py", "model.safetensors"], "MIT"),
     ("toonout", "joelseytre/toonout", ["birefnet_finetuned_toonout.pth", "README.md"],
      "MIT; training data CC-BY 4.0"),
+    # Reads the character's look as tags once per character, so the drawing prompt names it (gender, hair, outfit).
+    ("wd-tagger", "SmilingWolf/wd-vit-tagger-v3", ["model.onnx", "selected_tags.csv"], "Apache-2.0"),
 ]
 
 # ControlNet Union ProMax is two specially named files in the repository; they are renamed to the standard names.
