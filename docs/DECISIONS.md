@@ -230,6 +230,12 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   image; every frame is the layers moved onto the template skeleton (`animgen/rig.py`), no AI per frame. Face and
   hair are always the owner's pixels; proportions and limb order follow the template exactly; 8 frames in seconds.
   Prototype: `dev/tools/rig_proto.py`.
+- Owner, confirmed 2026-10-30: the layered cut-out approach is ACCEPTED. Owner-named limits to reduce: head locked in
+  place; cut-out look with seams at joints (needs mesh deformation); capes and long garments need their own bones;
+  hand shapes need their own images. Remedies proposed to the owner (Proposed, order pending the owner's answer):
+  head turns with the neck and spine; one skinned mesh with blended joint weights instead of rigid parts;
+  automatic spring-driven chains for capes and long hair; an optional low-strength AI finishing pass with the
+  owner's head pasted back; a per-character hand image only if open palms are wanted.
 
 ## Not done on purpose
 
