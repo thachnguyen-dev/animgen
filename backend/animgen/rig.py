@@ -18,6 +18,10 @@ arm is drawn over the shoulder and the body over the hip, and blending them pull
 the legs (knight test, 2026-10-30: smears at the feet and the hips). Capes, skirts and long hair swing on their own
 (cloth.py) when a whole animation is rendered (``render_sequence``).
 
+Open hands (owner, 2026-10-30): the rig image has closed fists. A second AI drawing (the hand image: near arm
+stretched forward, open palm) gives an open hand, put on the forearm in place of the fist in a second version of
+each arm mesh; a template frame says which hands are open.
+
 All images are canvas-sized RGBA facing right (as the templates); skeletons are canvas coordinates.
 """
 
@@ -41,6 +45,7 @@ CUT_WEIGHT = {"torso": 0.55, "head": 0.6, "uarm": 1.0, "larm": 1.0, "uleg": 0.9,
 LIMB_RADIUS = 0.09        # of the figure height: a limb pixel further than this from its bone stays with the body
 FILL_LOCAL = 0.04         # of the figure height: how far around the owner's body colours are averaged for a fill
 FILL_MATCH = 70.0         # RGB distance: a rig pixel further than this from that average is not used for the fill
+HAND_CUT = 0.8            # of the forearm from the elbow: the hand (with the wrist) starts here
 MESH_STEP = 6            # px between mesh vertices
 JOINT_BLEND = 0.03        # of the figure height: how far across a border between parts the two bones blend
 HEAD_TURN = 30.0          # degrees: the most the head turns away from the bind pose
@@ -65,6 +70,8 @@ class Mesh:
     tris: np.ndarray                    # (m, 3) vertex indices, in drawing order (back first)
     bones: tuple                        # k × (bind bone, frame bone)
     hanging: list[Hanging] = field(default_factory=list)
+    open_hand: bool = False             # the arm with the open hand instead of the fist
+    head: np.ndarray | None = None      # the body mesh only: its head pixels alone (for the finishing pass)
 
 
 @dataclass
@@ -73,13 +80,22 @@ class Rig:
     bind: dict                          # bind bone name -> (a, b)
     size: tuple[int, int]
 
-    def render(self, target: Skeleton, swing: dict[str, float] | None = None) -> Image.Image:
+    def render(self, target: Skeleton, swing: dict[str, float] | None = None, open_hands: tuple = (),
+               head_only: bool = False) -> Image.Image:
         """The character in the target pose (RGBA, canvas-sized, transparent around). ``swing``: the hanging parts'
-        angles (``swings``); without it they hang as drawn."""
+        angles (``swings``); without it they hang as drawn. ``open_hands``: "r" near, "l" far, drawn open when the
+        rig has an open hand. ``head_only``: the head alone, where it is in this pose."""
         w, h = self.size
         out = np.zeros((h, w, 4), np.uint8)
         frame = _target_bones(target)
+        has_open = {m.name for m in self.meshes if m.open_hand}
         for mesh in self.meshes:
+            if head_only and mesh.head is None:
+                continue
+            if mesh.name in has_open:
+                wanted = ("r" if mesh.name == "arm" else "l") in open_hands
+                if mesh.open_hand != wanted:
+                    continue
             mats = [self._matrix(b, f, frame) for b, f in mesh.bones]
             if any(m is None for m in mats):
                 continue
@@ -87,11 +103,12 @@ class Rig:
             for part in mesh.hanging:
                 if swing and swing.get(part.name):
                     verts = bend(verts, part, swing[part.name])
-            moved = _deform(mesh, mats, (h, w), verts)
+            moved = _deform(mesh, mats, (h, w), verts, mesh.head if head_only else mesh.rgba)
             k = moved[..., 3:4].astype(np.float32) / 255
             out[..., :3] = (moved[..., :3] * k + out[..., :3] * (1 - k)).astype(np.uint8)
             out[..., 3] = np.maximum(out[..., 3], moved[..., 3])
-        _drop_specks(out)
+        if not head_only:
+            _drop_specks(out)
         return Image.fromarray(out, "RGBA")
 
     def swings(self, targets: list[Skeleton], loop: bool) -> list[dict[str, float]]:
@@ -111,9 +128,11 @@ class Rig:
                     out[i][part.name] = angle
         return out
 
-    def render_sequence(self, targets: list[Skeleton], loop: bool) -> list[Image.Image]:
-        """A whole animation, with the hanging parts swinging through it."""
-        return [self.render(t, s) for t, s in zip(targets, self.swings(targets, loop))]
+    def render_sequence(self, targets: list[Skeleton], loop: bool,
+                        open_hands: list[tuple] | None = None) -> list[Image.Image]:
+        """A whole animation, with the hanging parts swinging through it (``open_hands`` per frame)."""
+        hands = open_hands or [()] * len(targets)
+        return [self.render(t, s, o) for t, s, o in zip(targets, self.swings(targets, loop), hands)]
 
     def _matrix(self, bind_bone: str, frame_bone: str, frame: dict) -> np.ndarray | None:
         a, b = self.bind[bind_bone]
@@ -135,7 +154,8 @@ def _head_matrix(a, b, a2, b2) -> np.ndarray:
     return m
 
 
-def _deform(mesh: Mesh, mats: list[np.ndarray], size: tuple[int, int], verts: np.ndarray) -> np.ndarray:
+def _deform(mesh: Mesh, mats: list[np.ndarray], size: tuple[int, int], verts: np.ndarray,
+            rgba: np.ndarray) -> np.ndarray:
     """The mesh's image bent by its bones: each vertex (``verts``: the bind-pose vertices, hanging parts already
     swung) moves by the weighted blend of its bones' moves, then every pixel of each moved triangle takes the colour
     of the same place in the bind-pose triangle."""
@@ -160,7 +180,7 @@ def _deform(mesh: Mesh, mats: list[np.ndarray], size: tuple[int, int], verts: np
     mapx = np.full((h, w), -1, np.float32)
     mapy = np.full((h, w), -1, np.float32)
     mapx[ys, xs], mapy[ys, xs] = src[:, 0], src[:, 1]
-    return cv2.remap(mesh.rgba, mapx, mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
+    return cv2.remap(rgba, mapx, mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0, 0))
 
 
 def _figure_height(sk: Skeleton) -> float:
@@ -303,20 +323,70 @@ def _mesh(name: str, rgba: np.ndarray, owner: np.ndarray, child_mask: np.ndarray
     return Mesh(name, rgba, verts, weights, tris, bones)
 
 
-def build_rig(original: Image.Image, original_sk: Skeleton, rig_image: Image.Image, rig_sk: Skeleton) -> Rig:
+def _hand_piece(hand_image: Image.Image, hand_sk: Skeleton) -> tuple[np.ndarray, tuple] | None:
+    """The open hand (with the wrist) cut from the hand image, and that image's forearm bone."""
+    bones = _target_bones(hand_sk)
+    a, b = bones["larm"]
+    if a is None or b is None:
+        return None
+    arr = np.array(hand_image.convert("RGBA"))
+    mask = _grown(cut_limbs(hand_image, hand_sk)["larm"], arr[..., 3] > 20)
+    keep = mask & (_along(arr.shape[:2], a, b) > HAND_CUT)
+    if not keep.any():
+        return None
+    return np.where(keep[..., None], arr, 0).astype(np.uint8), (a, b)
+
+
+def _along(shape: tuple[int, int], a, b) -> np.ndarray:
+    """Each pixel's position along the bone a→b: 0 at a, 1 at b."""
+    h, w = shape
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    return ((xs - a[0]) * dx + (ys - a[1]) * dy) / (dx * dx + dy * dy + 1e-6)
+
+
+def _with_open_hand(pieces: dict, hand: tuple[np.ndarray, tuple], bind: dict) -> dict:
+    """The arm pieces with the fist taken off the forearm and the open hand put on its wrist."""
+    rgba, (ha, hb) = hand
+    h, w = rgba.shape[:2]
+    a, b = bind["larm"]
+    out = dict(pieces)
+    forearm = pieces["larm"].copy()
+    forearm[_along((h, w), a, b) > HAND_CUT] = 0
+    moved = cv2.warpAffine(rgba, _similarity(ha, hb, a, b), (w, h), flags=cv2.INTER_LINEAR,
+                           borderValue=(0, 0, 0, 0))
+    k = moved[..., 3:4].astype(np.float32) / 255
+    forearm[..., :3] = (moved[..., :3] * k + forearm[..., :3] * (1 - k)).astype(np.uint8)
+    forearm[..., 3] = np.maximum(forearm[..., 3], moved[..., 3])
+    out["larm"] = forearm
+    return out
+
+
+def build_rig(original: Image.Image, original_sk: Skeleton, rig_image: Image.Image, rig_sk: Skeleton,
+              hand_image: Image.Image | None = None, hand_sk: Skeleton | None = None) -> Rig:
     pieces = _pieces(original, original_sk, rig_image, rig_sk)
     bind = {k: v for k, v in _target_bones(rig_sk).items() if v[0] is not None and v[1] is not None}
+    hand = _hand_piece(hand_image, hand_sk) if hand_image is not None and hand_sk is not None else None
+    open_pieces = _with_open_hand(pieces, hand, bind) if hand is not None and "larm" in pieces and "larm" in bind \
+        else None
     h, w = original.size[1], original.size[0]
     blend = JOINT_BLEND * _figure_height(rig_sk)
     meshes = []
-    for name, drawn, far in GROUPS:
+    variants = [(name, drawn, far, pieces, False) for name, drawn, far in GROUPS]
+    if open_pieces is not None:
+        at = [v[0] for v in variants]
+        for name in ("arm_far", "arm"):                    # right after the fist version, same place back to front
+            i = at.index(name) + 1
+            variants.insert(i, (name, variants[i - 1][1], variants[i - 1][2], open_pieces, True))
+            at.insert(i, name)
+    for name, drawn, far, src, open_hand in variants:
         rgba = np.zeros((h, w, 4), np.uint8)
         owner = np.zeros((h, w), np.int32)                 # which piece shows at each pixel, as its drawing order
         bones = []
         for order, (piece, bone, frame_bone) in enumerate(drawn, start=1):
-            if piece not in pieces or bone not in bind:
+            if piece not in src or bone not in bind:
                 continue
-            p = pieces[piece]
+            p = src[piece]
             k = p[..., 3:4].astype(np.float32) / 255
             rgba[..., :3] = (p[..., :3] * k + rgba[..., :3] * (1 - k)).astype(np.uint8)
             rgba[..., 3] = np.maximum(rgba[..., 3], p[..., 3])
@@ -327,8 +397,11 @@ def build_rig(original: Image.Image, original_sk: Skeleton, rig_image: Image.Ima
         if far:
             rgba[..., :3] = (rgba[..., :3] * FAR_DARKEN).astype(np.uint8)
         mesh = _mesh(name, rgba, owner, owner == 2, tuple(bones), bind, blend)
+        if mesh is not None:
+            mesh.open_hand = open_hand
         if mesh is not None and name == "body":
             mesh.hanging = find_hanging(mesh.verts, owner == 1, owner == 2, bind, _figure_height(rig_sk))
+            mesh.head = np.where((owner == 2)[..., None], rgba, 0).astype(np.uint8)
         if mesh is not None:
             meshes.append(mesh)
     return Rig(meshes, bind, (w, h))

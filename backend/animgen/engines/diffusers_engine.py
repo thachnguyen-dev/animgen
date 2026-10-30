@@ -205,9 +205,12 @@ class SDXLDrawer:
         if canvas_size == DRAW_SIZE:
             return self._draw(req, self.look(req.reference))
         k = DRAW_SIZE / canvas_size
+        extra = dict(req.extra)
+        if "rough" in extra:
+            extra["rough"] = extra["rough"].resize((DRAW_SIZE, DRAW_SIZE), Image.Resampling.LANCZOS)
         small = FrameRequest(req.reference.resize((DRAW_SIZE, DRAW_SIZE), Image.Resampling.LANCZOS),
                              _scaled(req.reference_skeleton, k), _scaled(req.target_skeleton, k), req.background,
-                             req.prompt, req.seed, req.hands_gripping, req.extra)
+                             req.prompt, req.seed, req.hands_gripping, extra)
         return self._draw(small, self.look(req.reference)).resize((canvas_size, canvas_size), Image.Resampling.LANCZOS)
 
     def _draw(self, req: FrameRequest, look: list[str]) -> Image.Image:
@@ -220,6 +223,8 @@ class SDXLDrawer:
         ref_flat.paste(req.reference, mask=req.reference.getchannel("A"))
 
         rough, depth = repose_with_depth(req.reference, req.reference_skeleton, req.target_skeleton)
+        # The finishing pass (finish.py) gives the frame made from the layers as the picture to repaint.
+        rough = req.extra.get("rough", rough)
         rough_flat = Image.new("RGB", rough.size, bg)
         rough_flat.paste(rough, mask=rough.getchannel("A"))
 
@@ -263,7 +268,8 @@ class SDXLDrawer:
                                 # field whenever the pose differed from the reference (Phase 0 on test art).
                                 control_image=controls, control_mode=modes,
                                 ip_adapter_image=ref_flat, width=width, height=size,
-                                num_inference_steps=STEPS, guidance_scale=GUIDANCE, strength=STRENGTH,
+                                num_inference_steps=STEPS, guidance_scale=GUIDANCE,
+                                strength=req.extra.get("strength", STRENGTH),
                                 controlnet_conditioning_scale=scales, generator=gen).images[0]
         except Exception as exc:  # noqa: BLE001
             if _is_oom(exc):

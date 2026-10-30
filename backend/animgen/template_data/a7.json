@@ -380,6 +380,9 @@
     null
    ],
    "contact": "ground",
+   "open": [
+    "l"
+   ],
    "weapon": {
     "hand": "r",
     "angle": 37.0,
@@ -457,6 +460,9 @@
     null
    ],
    "contact": "ground",
+   "open": [
+    "l"
+   ],
    "weapon": {
     "hand": "r",
     "angle": 39.0,
@@ -534,6 +540,9 @@
     null
    ],
    "contact": "ground",
+   "open": [
+    "l"
+   ],
    "weapon": {
     "hand": "r",
     "angle": 39.0,

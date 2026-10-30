@@ -84,3 +84,48 @@ def test_bent_knee_stays_in_one_piece():
     grey = ((np.abs(out[..., :3].astype(int) - 60).max(axis=-1) < 15) & (out[..., 3] > 200)).astype(np.uint8)
     n, _, stats, _ = cv2.connectedComponentsWithStats(grey, connectivity=8)
     assert sorted(stats[1:, cv2.CC_STAT_AREA])[-1] > 0.95 * stats[1:, cv2.CC_STAT_AREA].sum()
+
+
+# The hand image: the near arm straight forward, with a magenta open hand past the wrist.
+HAND_SK = list(SPREAD)
+HAND_SK[3], HAND_SK[4] = (590, 365), (680, 365)
+PALM = (255, 0, 255, 255)
+
+
+def hand_image() -> Image.Image:
+    img = rig_image()
+    d = ImageDraw.Draw(img)
+    d.rectangle((0, 0, 1024, 1024), fill=(0, 0, 0, 0))
+    d.line([(500, 365), HAND_SK[3]], fill=(200, 0, 0, 255), width=16)
+    d.line([HAND_SK[3], HAND_SK[4]], fill=FOREARM, width=14)
+    d.ellipse((672, 345, 712, 385), fill=PALM)
+    return img
+
+
+def open_rig():
+    return build_rig(figure(), Skeleton(list(STAND)), rig_image(), Skeleton(list(SPREAD)), hand_image(),
+                     Skeleton(list(HAND_SK)))
+
+
+def magenta(a: np.ndarray, level: int = 200) -> np.ndarray:
+    return (a[..., 0] > level) & (a[..., 2] > level) & (a[..., 1] < 80) & (a[..., 3] > 200)
+
+
+def test_open_hand_only_where_the_frame_asks():
+    r = open_rig()
+    fist = np.array(r.render(Skeleton(list(SPREAD))))
+    near = np.array(r.render(Skeleton(list(SPREAD)), open_hands=("r",)))
+    far = np.array(r.render(Skeleton(list(SPREAD)), open_hands=("l",)))
+    assert not magenta(fist).any()
+    ys, xs = np.nonzero(magenta(near))
+    assert len(xs) > 300 and np.hypot(xs.mean() - SPREAD[4][0], ys.mean() - SPREAD[4][1]) < 40   # on the near wrist
+    ys, xs = np.nonzero(magenta(far, level=150))
+    assert len(xs) > 300 and np.hypot(xs.mean() - SPREAD[7][0], ys.mean() - SPREAD[7][1]) < 40   # on the far wrist
+    assert far[ys, xs, 0].max() < 230                             # darkened as far
+
+
+def test_head_only_is_the_head_where_it_is_in_the_pose():
+    head = np.array(rig().render(Skeleton(list(SPREAD)), head_only=True))
+    ys, xs = np.nonzero(head[..., 3] > 200)
+    assert len(xs) > 2000 and ys.max() < 395 and abs(xs.mean() - 515) < 15     # the head, grown a little at the neck
+    assert not (head[450:, :, 3] > 0).any()                       # nothing of the body

@@ -53,6 +53,7 @@ class Pose:
     dx: float = 0.0       # pelvis shift forward (template units)
     lift: float = 0.0     # height of the lowest ankle above the ground (frames in the air)
     weapon: dict | None = field(default=None)
+    open: tuple = ()      # hands drawn open (palm) in this frame: "r" near, "l" far; others are fists
 
 
 def _limb(origin, angle_deg, length):
@@ -244,9 +245,9 @@ def a7() -> list[Pose]:
         Pose(spine=2, head=0, **near, l_sh=-6, l_el=12, **st),
         Pose(spine=0, head=-2, **near, l_sh=0, l_el=50, dx=-0.005, **st),      # pull the hand in
         Pose(spine=-3, head=-3, **near, l_sh=20, l_el=110, dx=-0.01, **st),     # gather at the chest
-        Pose(spine=6, head=2, **near, l_sh=70, l_el=30, dx=0.008, **st),        # thrust
-        Pose(spine=9, head=3, r_sh=4, r_el=12, l_sh=88, l_el=2, dx=0.015, **st),   # full reach, the cast
-        Pose(spine=9, head=3, r_sh=4, r_el=12, l_sh=86, l_el=4, dx=0.015, **st),   # hold
+        Pose(spine=6, head=2, **near, l_sh=70, l_el=30, dx=0.008, **st, open=("l",)),        # thrust
+        Pose(spine=9, head=3, r_sh=4, r_el=12, l_sh=88, l_el=2, dx=0.015, **st, open=("l",)),   # the cast
+        Pose(spine=9, head=3, r_sh=4, r_el=12, l_sh=86, l_el=4, dx=0.015, **st, open=("l",)),   # hold
         Pose(spine=5, head=2, **near, l_sh=40, l_el=45, dx=0.006, **st),        # draw back
         Pose(spine=2, head=0, **near, l_sh=-4, l_el=16, **st),
     )]
@@ -284,6 +285,8 @@ def build(tid: str) -> dict:
         pts, grounded = solve(p)
         fr = {"points": [None if q is None else [q[0], q[1]] for q in pts],
               "contact": "ground" if grounded else "air"}
+        if p.open:
+            fr["open"] = list(p.open)
         if spec["grip"] != "never":
             fr["weapon"] = p.weapon or {"hand": "r", "angle": 0.0, "layer": "front", "stage": 1}
         frames.append(fr)

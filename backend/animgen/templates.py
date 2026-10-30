@@ -11,7 +11,8 @@ File format (``template_data/<id>.json``)::
       "rest": [18 points],                          # the standing pose the template was authored on
       "frames": [                                   # exactly 8
         {"points": [18 points], "contact": "ground" | "air",
-         "weapon": {"hand": "r" | "l", "angle": 0.0, "layer": "front" | "behind", "stage": 1}}   # grip != never
+         "weapon": {"hand": "r" | "l", "angle": 0.0, "layer": "front" | "behind", "stage": 1},   # grip != never
+         "open": ["l"]}                            # optional: hands drawn as an open palm, others are fists
       ]
     }
 
@@ -71,6 +72,7 @@ class TemplateFrame:
     skeleton: Skeleton
     grounded: bool
     weapon: WeaponPose | None
+    open_hands: tuple[str, ...] = ()    # "r" near, "l" far: drawn as an open palm in this frame
 
 
 @dataclass
@@ -137,7 +139,11 @@ def parse_template(data: dict) -> MotionTemplate:
             if hand not in ("r", "l") or layer not in ("front", "behind") or stage not in (1, 2, 3):
                 raise TemplateError(f"{tid} frame {i + 1}: bad weapon data")
             wp = WeaponPose(hand=hand, angle=float(w.get("angle", 0.0)), layer=layer, stage=stage)
-        frames.append(TemplateFrame(skeleton=sk, grounded=(contact == "ground"), weapon=wp))
+        open_hands = fr.get("open", [])
+        if not isinstance(open_hands, list) or not set(open_hands) <= {"r", "l"}:
+            raise TemplateError(f"{tid} frame {i + 1}: open is a list of \"r\" and \"l\"")
+        frames.append(TemplateFrame(skeleton=sk, grounded=(contact == "ground"), weapon=wp,
+                                    open_hands=tuple(open_hands)))
     return MotionTemplate(
         id=tid, animation=str(data.get("animation", tid)), variant=data.get("variant"),
         name_vi=str(data.get("name_vi", tid)), status=str(data.get("status", "Proposed")),
