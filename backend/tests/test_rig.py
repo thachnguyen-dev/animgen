@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -60,3 +61,26 @@ def test_forearm_follows_the_target():
     green = (out[..., 1] > 150) & (out[..., 0] < 80) & (out[..., 3] > 200)
     ys, xs = np.nonzero(green)
     assert xs.max() > 630 and abs(ys.mean() - 450) < 20
+
+
+def test_head_turns_with_its_bone_and_keeps_its_size():
+    r = rig()
+    still = np.array(r.render(Skeleton(list(SPREAD))))
+    tgt = list(SPREAD)
+    neck, nose = np.array(SPREAD[1], float), np.array(SPREAD[0], float)
+    ang = np.radians(20)                                # chin down 20 degrees
+    v = nose - neck
+    tgt[0] = tuple(neck + [v[0] * np.cos(ang) - v[1] * np.sin(ang), v[0] * np.sin(ang) + v[1] * np.cos(ang)])
+    turned = np.array(r.render(Skeleton(tgt)))
+    skin = lambda a: (a[..., 0] > 200) & (a[..., 1] > 150) & (a[..., 2] > 100) & (a[..., 3] > 200)   # noqa: E731
+    assert (skin(still) != skin(turned)).sum() > 200              # it moved
+    assert abs(int(skin(turned).sum()) - int(skin(still).sum())) < 0.05 * skin(still).sum()   # not stretched
+
+
+def test_bent_knee_stays_in_one_piece():
+    tgt = list(SPREAD)
+    tgt[10] = (470, 800)                                # near lower leg folded back
+    out = np.array(rig().render(Skeleton(tgt)))
+    grey = ((np.abs(out[..., :3].astype(int) - 60).max(axis=-1) < 15) & (out[..., 3] > 200)).astype(np.uint8)
+    n, _, stats, _ = cv2.connectedComponentsWithStats(grey, connectivity=8)
+    assert sorted(stats[1:, cv2.CC_STAT_AREA])[-1] > 0.95 * stats[1:, cv2.CC_STAT_AREA].sum()

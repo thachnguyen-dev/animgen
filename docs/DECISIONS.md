@@ -236,6 +236,14 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   head turns with the neck and spine; one skinned mesh with blended joint weights instead of rigid parts;
   automatic spring-driven chains for capes and long hair; an optional low-strength AI finishing pass with the
   owner's head pasted back; a per-character hand image only if open palms are wanted.
+- Owner, confirmed 2026-10-30: all remedies agreed, in this order: (1) head movement, (2) skinned mesh, (3) cape and
+  hair chains, detected automatically and correctable in the skeleton editor, (4) AI finishing pass as an option, off
+  by default, (5) open palm hand image per character (one extra AI drawing, used where a template asks for it).
+- Done (1)+(2), mine: five grid meshes in the rig image's pose (far arm, far leg, near leg, body+head, near arm);
+  elbows and knees blend their two bones over JOINT_BLEND across the joint; the head is rigid, turns with the
+  template's head bone within HEAD_TURN, and only the neck blends. Shoulders and hips are not blended: blending
+  them pulled the tunic and cape along with the legs (knight: smears at feet and hips). A body fill from the rig
+  image that does not match the owner's colours around it takes their average (archer: AI quiver as a pale bag).
 
 ## Not done on purpose
 
