@@ -1,4 +1,4 @@
-﻿# Handoff — local finalisation (2026-10-30, resumed)
+# Handoff — local finalisation (2026-10-30, resumed)
 
 Paused at the owner's request, then resumed the same day. This page says where the work stands, what was verified on the owner's PC, and what
 comes next, so a later session (on the PC or in the cloud) can pick it up. Decisions are in `DECISIONS.md`.
@@ -72,3 +72,13 @@ PowerShell scripts.
 - Next: rerun `python -m animgen.phase0 --character dev/test_art/test_knight.png --anims a1a walk --frames 4` (was
   stopped for low memory) and check the punch load frame and the cape; then republish to C:/AnimGen with the app
   closed and check the "Tay nắm" checkbox colour in the running app.
+## Owner test result and the layered cut-out direction (2026-10-30)
+
+- Owner test of the diffusion-per-frame build: consistent frames, but face/hair drift, wrong legs, broken proportions.
+  Owner inputs: one complete character image; closed fists always; keep overall face/hair; imperfections in secondary
+  parts are acceptable.
+- Prototype (e8423c3): animgen/rig.py + dev/tools/rig_proto.py. One AI rig image per character (spread pose), then
+  every frame is layers moved onto the template skeleton. Knight and archer sheets: identical face, correct leg order,
+  punch from behind the head, cast arm forward. See DECISIONS.md "Layered cut-out character".
+- Next: owner decides on integration (rig image step reviewed/redrawn in the app, then instant frames). The phase0
+  knight rerun above is moot if the rig method is adopted.
