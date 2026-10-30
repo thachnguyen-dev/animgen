@@ -29,6 +29,13 @@ WEIGHT = {"head": 0.6, "torso": 1.0, "uarm": 0.85, "larm": 0.75, "uleg": 1.0, "l
 # arm then moves away, the gap it leaves in the torso is filled from the surrounding torso colours (cv2.inpaint);
 # keeping a copy of the arm on the torso instead risked a duplicate arm.
 ARM_RADIUS = 0.035
+# Limbs keep only the pixels within this share of the skeleton's height from their own bone; anything farther (a cape,
+# a long robe, a quiver) belongs to the torso and moves with the body. Phase 0, 2026-10-30: on a knight whose arm
+# hangs along his back the arm parts took most of the cape and a strip of the breastplate, which flew off as the arm
+# swung, and the legs took the bottom of the cape.
+LIMB_REACH = {"uarm": 0.07, "larm": 0.07, "uleg": 0.08, "lleg": 0.08}
+SPECK_SHARE = 0.01         # loose pieces smaller than this share of the largest piece are dropped from the result
+FOOT_REACH = 0.14          # the foot sticks out past the ankle: the lower leg also keeps everything this close to it
 FILL_RADIUS = 5
 DRAW_ORDER_FAR = (("uleg_far", "uleg"), ("lleg_far", "lleg"), ("uarm_far", "uarm"), ("larm_far", "larm"))
 DRAW_ORDER_NEAR = ("uleg", "lleg", "torso", "head", "uarm", "larm")
@@ -81,27 +88,50 @@ def _similarity(a: Point, b: Point, a2: Point, b2: Point) -> np.ndarray:
     return m
 
 
-def repose(reference: Image.Image, ref_skeleton: Skeleton, target: Skeleton) -> Image.Image:
-    """The reference figure (RGBA, facing right) moved onto ``target``; same canvas size, transparent around."""
-    arr = np.array(reference.convert("RGBA"))
+def cut_labels(arr: np.ndarray, ref_skeleton: Skeleton) -> tuple[list[str], np.ndarray, np.ndarray]:
+    """The part names, each pixel's part index and the figure mask (for inspecting the cut)."""
+    ref_bones = {k: v for k, v in _reference_bones(ref_skeleton).items() if v[0] is not None and v[1] is not None}
+    names, label, alpha, _ = _cut(arr, ref_skeleton, ref_bones)
+    return names, label, alpha
+
+
+def _cut(arr: np.ndarray, ref_skeleton: Skeleton, ref_bones: dict) -> tuple[list[str], np.ndarray, np.ndarray,
+                                                                          np.ndarray]:
     h, w = arr.shape[:2]
     alpha = arr[..., 3] > 20
-    ref_bones = {k: v for k, v in _reference_bones(ref_skeleton).items() if v[0] is not None and v[1] is not None}
-    tgt_bones = _target_bones(target)
-    if "torso" not in ref_bones or tgt_bones["torso"][0] is None or tgt_bones["torso"][1] is None:
-        return reference.convert("RGBA").copy()
     names = list(ref_bones)
     ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
     dist = np.stack([_segment_distance(xs, ys, *ref_bones[n]) * WEIGHT[n] for n in names])
     label = np.argmin(dist, axis=0)
     ys_all = [pt[1] for pt in ref_skeleton.points if pt is not None]
     radius = ARM_RADIUS * (max(ys_all) - min(ys_all))
+    torso = names.index("torso")
+    for part, reach in LIMB_REACH.items():
+        if part in ref_bones:
+            i = names.index(part)
+            far = dist[i] / WEIGHT[part] > reach * (max(ys_all) - min(ys_all))
+            if part == "lleg":
+                ankle = ref_bones["lleg"][1]
+                far &= np.hypot(xs - ankle[0], ys - ankle[1]) > FOOT_REACH * (max(ys_all) - min(ys_all))
+            label[(label == i) & far] = torso
     torso_extra = np.zeros((h, w), bool)
     for arm in ("larm", "uarm"):  # forearm last so it wins where both are close
         if arm in ref_bones:
             near = _segment_distance(xs, ys, *ref_bones[arm]) < radius
             torso_extra |= near & (label == names.index("torso"))
             label[near] = names.index(arm)
+    return names, label, alpha, torso_extra
+
+
+def repose(reference: Image.Image, ref_skeleton: Skeleton, target: Skeleton) -> Image.Image:
+    """The reference figure (RGBA, facing right) moved onto ``target``; same canvas size, transparent around."""
+    arr = np.array(reference.convert("RGBA"))
+    h, w = arr.shape[:2]
+    ref_bones = {k: v for k, v in _reference_bones(ref_skeleton).items() if v[0] is not None and v[1] is not None}
+    tgt_bones = _target_bones(target)
+    if "torso" not in ref_bones or tgt_bones["torso"][0] is None or tgt_bones["torso"][1] is None:
+        return reference.convert("RGBA").copy()
+    names, label, alpha, torso_extra = _cut(arr, ref_skeleton, ref_bones)
     out = np.zeros_like(arr)
     grow = np.ones((PART_GROW, PART_GROW), np.uint8)
 
@@ -130,7 +160,19 @@ def repose(reference: Image.Image, ref_skeleton: Skeleton, target: Skeleton) -> 
         if part == "uarm":  # torso, head and legs are in place: fill what the arm left uncovered in the torso
             _fill_torso_gap(out, torso_extra, ref_bones["torso"], tgt_bones["torso"])
         paste(part, part)
+    _drop_specks(out)
     return Image.fromarray(out, "RGBA")
+
+
+def _drop_specks(out: np.ndarray) -> None:
+    """Small pieces cut loose from their part (a spur, a buckle) would be painted as stray objects."""
+    n, comp, stats, _ = cv2.connectedComponentsWithStats((out[..., 3] > 20).astype(np.uint8), connectivity=8)
+    if n <= 2:
+        return
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    for i, area in enumerate(areas, start=1):
+        if area < SPECK_SHARE * areas.max():
+            out[comp == i] = 0
 
 
 def _fill_torso_gap(out: np.ndarray, gap_ref: np.ndarray, bone: tuple, bone_target: tuple) -> None:

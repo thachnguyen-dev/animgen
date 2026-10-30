@@ -48,3 +48,21 @@ def test_far_arm_is_darker_copy_behind():
     px = out[505, 415]
     assert px[3] > 200 and 100 < px[1] < 170 and px[0] < 60       # green forearm at FAR_DARKEN
     assert repose(ref, sk, Skeleton([None] * 18)).size == ref.size  # no target bones: unchanged copy
+
+
+def test_cape_far_from_the_arm_stays_with_the_body():
+    ref, sk = figure(), Skeleton(list(STAND))
+    d = ImageDraw.Draw(ref)
+    d.rectangle((400, 380, 440, 760), fill=(200, 30, 30, 255))      # a cape hanging behind, well clear of the arm
+    tgt = list(STAND)
+    tgt[RELB], tgt[RWRI] = (560, 420), (620, 380)                    # near arm raised forward
+    out = np.array(repose(ref, sk, Skeleton(tgt)))
+    red = (out[..., 0] > 150) & (out[..., 1] < 80) & (out[..., 3] > 200)
+    assert red[400:740, 405:435].mean() > 0.9                       # the cape did not swing with the arm
+
+
+def test_loose_specks_are_dropped():
+    ref, sk = figure(), Skeleton(list(STAND))
+    ImageDraw.Draw(ref).ellipse((700, 900, 704, 904), fill=(0, 0, 255, 255))   # a tiny detached piece
+    out = np.array(repose(ref, sk, Skeleton(list(STAND))))
+    assert out[898:906, 698:706, 3].max() == 0
