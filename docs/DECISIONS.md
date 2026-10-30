@@ -323,6 +323,23 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
     owner can move it in Photoshop.
   - Fixed on the way: the rig was dropped when a saved joint rounded differently from the live one (archer: 541.5
     against 541.4996); the skeletons now match within 1 px.
+- Every pose first (owner, 2026-10-31: "complete the remaining missing animation poses … prioritize completing
+  these poses before optimizing the current workflow"):
+  - The cuts C1 and C2 are lifted: Jump, Fall, Hit, Death, A3 (two-handed) and A4 (polearm) now have their 8 poses
+    (Proposed until the owner approves them, as every pose). Jump is a whole jump in place (crouch to landing);
+    Fall is a loop in the air; Hit recoils from a blow in front; Death falls backward and lies face up (a pose may
+    now rest on its lowest joint instead of an ankle). A3 and A4 hold the weapon with both hands; A4's far hand is
+    in front on the shaft.
+  - More attacks, from common 2D attack sets (owner asked for research; sources: sprite packs listing thrusts,
+    overhead and rising slashes, combo and dual-wield attacks): A2b one-handed thrust, A2c overhead chop, A2d rising
+    slash, A8a dual wielding with alternating slashes, A8b dual wielding with a cross slash. Proposed: they extend the
+    Confirmed attack list only if the owner keeps them.
+  - Dual wielding: a template frame may carry "weapon2", the other hand's weapon; the hand anchor file then has
+    "second" for it (same fields).
+  - The character keeps within 5% of its height of where it stands (§6.3, no unnecessary drift), lunges and the hit
+    recoil included.
+  - The owner's custom poses (answer to "option 1", a pose editor) stay planned as the fallback for characters the
+    built-in poses do not suit (owner, 2026-10-31).
 
 ## Not done on purpose
 

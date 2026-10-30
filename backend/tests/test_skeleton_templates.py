@@ -77,9 +77,10 @@ def test_template_must_have_eight_frames():
         parse_template(data)
 
 
-def test_available_marks_cut_animations_not_ready():
-    av = {a["id"]: a for a in available()}
-    assert av["walk"]["ready"] and not av["jump"]["ready"] and not av["a3"]["ready"]
+def test_every_listed_animation_is_ready():
+    # The cuts C1 and C2 are lifted (owner, 2026-10-31: finish every pose first).
+    av = available()
+    assert av and all(a["ready"] for a in av)
 
 
 @pytest.mark.parametrize("tid", READY)

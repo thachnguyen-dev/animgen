@@ -189,6 +189,16 @@ Chosen from the list; no free-form text prompts. One animation is generated at a
 | A5 | Bow | draw, aim, release, follow-through | yes, 3 draw stages |
 | A6 | Magic staff | raise, gather, cast forward | yes |
 
+Proposed additions (2026-10-31, the owner asked for more attack styles; kept only if the owner approves them):
+
+| # | Variant | Movement idea (8 frames) | Weapon |
+|---|---|---|---|
+| A2b | One-handed — thrust | pull back level, lunge, stab straight forward | yes |
+| A2c | One-handed — overhead chop | blade up over the head, vertical cut down | yes |
+| A2d | One-handed — rising slash | blade low behind, sweep up to above the head | yes |
+| A8a | Dual wielding — alternating | near blade cuts, then the far blade | yes, one in each hand |
+| A8b | Dual wielding — cross slash | both blades raised, cut down together | yes, one in each hand |
+
 The list is Confirmed. The movement ideas are a starting point. The exact 8 poses of each variant are drawn as motion
 templates and **approved by the owner during the build**. Until then they are Proposed.
 

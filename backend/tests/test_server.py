@@ -69,8 +69,9 @@ def test_token_required(server):
 def test_full_flow(server, tmp_path):
     hero = synth.character(tmp_path / "hero.png")
     st, anims = call(server, "GET", "/animations")
-    assert st == 200 and {a["id"] for a in anims if a["ready"]} == {"idle", "walk", "run", "a1a", "a1b", "a2",
-                                                                      "a5", "a6", "a7"}
+    assert st == 200 and {a["id"] for a in anims if a["ready"]} == {
+        "idle", "walk", "run", "jump", "fall", "hit", "death", "a1a", "a1b", "a2", "a2b", "a2c", "a2d", "a3", "a4",
+        "a5", "a6", "a7", "a8a", "a8b"}
     assert {a["id"]: a["grip"] for a in anims if a["ready"]}["walk"] == "optional"
     st, r = call(server, "POST", "/character", {"path": str(hero), "name": "Hiệp sĩ"})
     assert st == 200 and r["character"]["facing_source"] == "assumed"

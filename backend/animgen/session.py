@@ -848,18 +848,26 @@ class Session:
         canvas = ch.placement.image.width
         k = height / canvas
         frames = []
-        for i, (tf, slot) in enumerate(zip(tpl.frames, self.slots)):
-            wp = tf.weapon
-            hand = hand_point(slot.skeleton, wp.hand) if wp is not None and slot.skeleton is not None else None
-            if wp is None or hand is None:
-                frames.append({"index": i + 1, "weapon": False})
-                continue
+        def anchor(wp, sk) -> dict | None:
+            hand = hand_point(sk, wp.hand) if wp is not None and sk is not None else None
+            if hand is None:
+                return None
             x, y, angle = hand[0], hand[1], wp.angle
             if ch.placement.mirrored:      # back to the character's own facing, as the frames are exported
                 x, angle = canvas - 1 - x, 180.0 - angle
-            frames.append({"index": i + 1, "weapon": True, "x": round(x * k, 2), "y": round(y * k, 2),
-                           "angle": round((angle + 180.0) % 360.0 - 180.0, 2), "layer": wp.layer,
-                           "bow_stage": wp.stage, "hand": "near" if wp.hand == "r" else "far"})
+            return {"x": round(x * k, 2), "y": round(y * k, 2), "angle": round((angle + 180.0) % 360.0 - 180.0, 2),
+                    "layer": wp.layer, "bow_stage": wp.stage, "hand": "near" if wp.hand == "r" else "far"}
+
+        for i, (tf, slot) in enumerate(zip(tpl.frames, self.slots)):
+            main = anchor(tf.weapon, slot.skeleton)
+            if main is None:
+                frames.append({"index": i + 1, "weapon": False})
+                continue
+            entry = {"index": i + 1, "weapon": True, **main}
+            second = anchor(tf.weapon2, slot.skeleton)
+            if second is not None:          # dual wielding: the other hand's weapon
+                entry["second"] = second
+            frames.append(entry)
         return {
             "animation": tpl.id, "weapon_kinds": tpl.weapon_kinds,
             "frame_size": [height, height],
@@ -868,7 +876,7 @@ class Session:
                      "grip towards the tip, 0 = pointing right, 90 = pointing down (in Unity, z rotation = -angle). "
                      "layer: weapon in front of or behind the character. weapon_scale: multiply a weapon drawn at "
                      "the character image's pixel scale by this. hand: near = the arm on the viewer's side, far = the "
-                     "arm behind the body.",
+                     "arm behind the body. second: dual wielding, the other hand's weapon (same fields).",
             "frames": frames,
         }
 

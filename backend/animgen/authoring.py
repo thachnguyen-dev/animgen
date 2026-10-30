@@ -53,7 +53,9 @@ class Pose:
     dx: float = 0.0       # pelvis shift forward (template units)
     lift: float = 0.0     # height of the lowest ankle above the ground (frames in the air)
     weapon: dict | None = field(default=None)
+    weapon2: dict | None = field(default=None)    # the other hand's weapon (dual wielding)
     open: tuple = ()      # hands drawn open (palm) in this frame: "r" near, "l" far; others are fists
+    floor: bool = False   # lying or kneeling: the lowest joint, not an ankle, rests on the ground
 
 
 def _limb(origin, angle_deg, length):
@@ -90,8 +92,9 @@ def solve(p: Pose) -> tuple[list, bool]:
     pts[RANK] = _limb(pts[RKNE], p.r_hip - p.r_knee, SHIN)
     pts[LKNE] = _limb(pts[LHIP], p.l_hip, THIGH)
     pts[LANK] = _limb(pts[LKNE], p.l_hip - p.l_knee, SHIN)
-    # Stand the lowest ankle on the ground (y = -ANKLE_H), then lift frames in the air.
-    low = max(pts[RANK][1], pts[LANK][1])
+    # Stand the lowest ankle on the ground (y = -ANKLE_H), then lift frames in the air. A body on the floor rests on
+    # its lowest joint, which is as far above the ground as an ankle is (the flesh around it).
+    low = max(q[1] for q in pts if q is not None) if p.floor else max(pts[RANK][1], pts[LANK][1])
     dy = -ANKLE_H - low - p.lift
     pts = [None if q is None else (round(q[0], 4), round(q[1] + dy, 4)) for q in pts]
     return pts, p.lift <= 0.0
@@ -133,6 +136,19 @@ def reach(x: float, y: float, elbow: str = "down") -> tuple[float, float]:
 def _near(x: float, y: float, elbow: str = "down") -> dict:
     sh, el = reach(x, y, elbow)
     return {"r_sh": sh, "r_el": el}
+
+
+def _far(x: float, y: float, elbow: str = "down") -> dict:
+    """The far wrist at (x, y) from the NEAR shoulder (the far shoulder sits a little behind it)."""
+    sh, el = reach(x + 2 * HIP_DEPTH, y, elbow)
+    return {"l_sh": sh, "l_el": el}
+
+
+def _both(x: float, y: float, angle: float, gap: float) -> dict:
+    """Both hands on one handle: the near hand at (x, y) from the near shoulder, the far hand ``gap`` further along
+    the handle toward the tip (``angle``, image degrees; a negative gap is toward the pommel)."""
+    a = math.radians(angle)
+    return {**_near(x, y), **_far(x + math.cos(a) * gap, y + math.sin(a) * gap)}
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -287,6 +303,203 @@ def a7() -> list[Pose]:
     )]
 
 
+# --- The rest of the Confirmed list (2026-10-31: owner asked to finish them before the workflow work) -----------
+def jump() -> list[Pose]:
+    """A whole jump in place: crouch, push off, rise with the knees tucking, peak, come down, land, absorb, stand."""
+    return [held(p, offset=-35) for p in (
+        Pose(spine=18, head=4, r_sh=-40, r_el=15, l_sh=-45, l_el=15, r_hip=42, r_knee=72, l_hip=36, l_knee=66),
+        Pose(spine=8, head=0, r_sh=110, r_el=30, l_sh=100, l_el=30, r_hip=12, r_knee=12, l_hip=6, l_knee=8),
+        Pose(spine=2, head=-4, r_sh=160, r_el=20, l_sh=150, l_el=20, r_hip=-4, r_knee=14, l_hip=-10, l_knee=20,
+             lift=0.07),
+        Pose(spine=4, head=-2, r_sh=140, r_el=40, l_sh=130, l_el=40, r_hip=50, r_knee=80, l_hip=40, l_knee=90,
+             lift=0.17),
+        Pose(spine=6, head=0, r_sh=110, r_el=40, l_sh=100, l_el=40, r_hip=60, r_knee=95, l_hip=50, l_knee=100,
+             lift=0.21),
+        Pose(spine=6, head=2, r_sh=80, r_el=20, l_sh=70, l_el=20, r_hip=20, r_knee=30, l_hip=10, l_knee=25,
+             lift=0.10),
+        Pose(spine=20, head=6, r_sh=50, r_el=30, l_sh=40, l_el=30, r_hip=45, r_knee=75, l_hip=40, l_knee=70),
+        Pose(spine=6, head=2, r_sh=10, r_el=15, l_sh=-8, l_el=15, r_hip=8, r_knee=10, l_hip=-4, l_knee=8),
+    )]
+
+
+def fall() -> list[Pose]:
+    """Falling, looped while in the air: arms up and out, legs hanging a little bent, slowly paddling."""
+    out = []
+    for i in range(8):
+        sw = math.sin(_cyc(i))
+        out.append(held(Pose(spine=-4, head=-6, r_sh=135 + 12 * sw, r_el=35, l_sh=125 - 12 * sw, l_el=35,
+                             r_hip=14 + 8 * sw, r_knee=30 - 8 * sw, l_hip=4 - 8 * sw, l_knee=38 + 8 * sw,
+                             lift=0.12), offset=-35))
+    return out
+
+
+def hit() -> list[Pose]:
+    """Hit from the front: the head snaps back, the body recoils with the arms flung forward, then recovers."""
+    st = dict(r_hip=8, r_knee=6, l_hip=-8, l_knee=6)
+    return [held(p, offset=-35) for p in (
+        Pose(spine=3, head=2, r_sh=10, r_el=20, l_sh=-6, l_el=20, **st),
+        Pose(spine=-22, head=-24, r_sh=45, r_el=30, l_sh=35, l_el=30, dx=-0.03, **st),               # impact
+        Pose(spine=-30, head=-26, r_sh=55, r_el=40, l_sh=45, l_el=40, dx=-0.045, r_hip=12, r_knee=20,
+             l_hip=-12, l_knee=16),                                                                   # recoil
+        Pose(spine=-24, head=-16, r_sh=40, r_el=40, l_sh=30, l_el=40, dx=-0.045, r_hip=12, r_knee=22, l_hip=-12,
+             l_knee=18),
+        Pose(spine=-10, head=-4, r_sh=25, r_el=35, l_sh=15, l_el=35, dx=-0.04, **st),                # catch it
+        Pose(spine=2, head=4, r_sh=15, r_el=30, l_sh=0, l_el=30, dx=-0.018, **st),
+        Pose(spine=5, head=4, r_sh=12, r_el=22, l_sh=-4, l_el=22, dx=-0.008, **st),
+        Pose(spine=3, head=2, r_sh=10, r_el=20, l_sh=-6, l_el=20, **st),
+    )]
+
+
+def death() -> list[Pose]:
+    """Struck, the knees give way and the body falls backward, lands, bounces a little and lies still on its back
+    (face up)."""
+    return [held(p, offset=-35) for p in (
+        Pose(spine=-12, head=-15, r_sh=35, r_el=30, l_sh=25, l_el=30, dx=-0.01, r_hip=8, r_knee=8, l_hip=-8,
+             l_knee=8),
+        Pose(spine=-6, head=12, r_sh=10, r_el=20, l_sh=0, l_el=20, dx=-0.015, r_hip=20, r_knee=40, l_hip=12,
+             l_knee=45),                                                                             # knees give
+        Pose(spine=-24, head=-6, r_sh=40, r_el=25, l_sh=30, l_el=25, dx=-0.02, r_hip=34, r_knee=72, l_hip=26,
+             l_knee=78),
+        Pose(spine=-52, head=-20, r_sh=110, r_el=30, l_sh=100, l_el=30, dx=-0.03, r_hip=45, r_knee=55, l_hip=38,
+             l_knee=60, floor=True),                                                                 # falling
+        Pose(spine=-86, head=-40, r_sh=150, r_el=20, l_sh=140, l_el=20, dx=-0.04, r_hip=70, r_knee=40, l_hip=62,
+             l_knee=50, floor=True),                                                                 # lands
+        Pose(spine=-80, head=-38, r_sh=120, r_el=20, l_sh=115, l_el=25, dx=-0.04, r_hip=62, r_knee=34, l_hip=55,
+             l_knee=42, floor=True),                                                                 # bounce
+        Pose(spine=-90, head=-45, r_sh=95, r_el=6, l_sh=92, l_el=6, dx=-0.04, r_hip=86, r_knee=12, l_hip=80,
+             l_knee=22, floor=True),
+        Pose(spine=-90, head=-45, r_sh=94, r_el=4, l_sh=91, l_el=4, dx=-0.04, r_hip=88, r_knee=8, l_hip=82,
+             l_knee=18, floor=True),                                                                 # still
+    )]
+
+
+_WIDE = dict(r_hip=22, r_knee=14, l_hip=-20, l_knee=8)
+_LUNGE = dict(r_hip=40, r_knee=34, l_hip=-30, l_knee=4)
+
+
+def a3() -> list[Pose]:
+    """Two-handed heavy weapon: both hands on the hilt (the far one toward the pommel), a slow lift over the head,
+    a held wind-up, then a downward smash with the body following, and recovery."""
+    g = -0.06
+    return [
+        Pose(spine=5, head=3, **_both(0.10, 0.20, -60, g), **_WIDE, weapon=w("r", -60)),             # ready
+        Pose(spine=2, head=1, **_both(0.08, 0.04, -100, g), **_WIDE, weapon=w("r", -100)),           # lift
+        Pose(spine=-6, head=-2, **_both(-0.03, -0.22, -200, g), dx=-0.01, **_WIDE, weapon=w("r", -200)),  # over
+        Pose(spine=-8, head=-3, **_both(-0.04, -0.23, -205, g), dx=-0.012, **_WIDE, weapon=w("r", -205)),  # hold
+        Pose(spine=6, head=2, **_both(0.10, -0.20, -80, g), dx=0.005, **_WIDE, weapon=w("r", -80)),   # swing
+        Pose(spine=22, head=8, **_both(0.22, 0.10, 40, g), dx=0.03, r_hip=34, r_knee=40, l_hip=-24, l_knee=12,
+             weapon=w("r", 40)),                                                                     # smash
+        Pose(spine=25, head=10, **_both(0.21, 0.15, 62, g), dx=0.032, r_hip=36, r_knee=44, l_hip=-24, l_knee=14,
+             weapon=w("r", 62)),                                                                     # impact
+        Pose(spine=10, head=5, **_both(0.12, 0.16, -30, g), dx=0.012, **_WIDE, weapon=w("r", -30)),   # recover
+    ]
+
+
+def a4() -> list[Pose]:
+    """Polearm (spear): the near hand at the back of the shaft, the far hand in front; draw back, step, thrust
+    forward with the body behind it, hold, pull back."""
+    return [
+        Pose(spine=4, head=2, **_both(0.0, 0.17, -8, 0.14), **_STANCE, weapon=w("r", -8)),                # ready
+        Pose(spine=-4, head=0, **_both(-0.08, 0.15, -6, 0.13), dx=-0.012, **_STANCE, weapon=w("r", -6)),   # draw
+        Pose(spine=-2, head=0, **_both(-0.06, 0.15, -5, 0.13), r_hip=34, r_knee=22, l_hip=-18, l_knee=6,
+             weapon=w("r", -5)),                                                                         # step
+        Pose(spine=12, head=6, **_both(0.10, 0.06, -3, 0.16), dx=0.04, **_LUNGE, weapon=w("r", -3)),      # thrust
+        Pose(spine=16, head=8, **_both(0.14, 0.04, -2, 0.15), dx=0.045, **_LUNGE, weapon=w("r", -2)),      # reach
+        Pose(spine=16, head=8, **_both(0.14, 0.045, -2, 0.15), dx=0.045, **_LUNGE, weapon=w("r", -2)),     # hold
+        Pose(spine=6, head=3, **_both(0.0, 0.14, -6, 0.14), dx=0.03, **_STANCE, weapon=w("r", -6)),       # pull
+        Pose(spine=4, head=2, **_both(0.0, 0.17, -8, 0.14), dx=0.01, **_STANCE, weapon=w("r", -8)),
+    ]
+
+
+# --- More attacks from common 2D attack sets (2026-10-31, owner asked; Proposed, not in the Confirmed list) -------
+_GUARD = dict(l_sh=25, l_el=70)          # the free far hand up in front of the body
+
+
+def a2b() -> list[Pose]:
+    """One-handed thrust (stab): pull the blade back level at the hip, step into a lunge and stab straight forward,
+    the far arm swinging back for balance, then withdraw."""
+    return [
+        Pose(spine=5, head=4, **_near(0.12, 0.14), **_GUARD, **_STANCE, weapon=w("r", -30)),             # ready
+        Pose(spine=-4, head=2, **_near(-0.06, 0.10, "back"), l_sh=50, l_el=30, dx=-0.01, **_STANCE,
+             weapon=w("r", -5)),                                                                          # cock
+        Pose(spine=-6, head=2, **_near(-0.08, 0.08, "back"), l_sh=55, l_el=25, dx=-0.01, r_hip=30, r_knee=20,
+             l_hip=-16, l_knee=6, weapon=w("r", -3)),                                                     # step
+        Pose(spine=12, head=6, **_near(0.22, 0.04), l_sh=-30, l_el=20, dx=0.04, **_LUNGE, weapon=w("r", -2)),
+        Pose(spine=16, head=8, **_near(0.29, 0.03), l_sh=-40, l_el=15, dx=0.045, **_LUNGE, weapon=w("r", 0)),
+        Pose(spine=16, head=8, **_near(0.28, 0.03), l_sh=-38, l_el=16, dx=0.045, **_LUNGE, weapon=w("r", 0)),
+        Pose(spine=8, head=5, **_near(0.10, 0.10), l_sh=0, l_el=40, dx=0.025, **_STANCE, weapon=w("r", -15)),
+        Pose(spine=5, head=4, **_near(0.12, 0.14), **_GUARD, dx=0.008, **_STANCE, weapon=w("r", -30)),
+    ]
+
+
+def a2c() -> list[Pose]:
+    """One-handed overhead chop: the blade straight up over the head and a little behind, then cut vertically down
+    in front, the body bending into it."""
+    return [
+        Pose(spine=5, head=4, **_near(0.12, 0.14), **_GUARD, **_STANCE, weapon=w("r", -50)),             # ready
+        Pose(spine=-2, head=0, **_near(0.02, -0.26), **_GUARD, **_STANCE, weapon=w("r", -100)),          # raise
+        Pose(spine=-6, head=-2, **_near(-0.04, -0.27), **_GUARD, dx=-0.01, **_STANCE, weapon=w("r", -150)),
+        Pose(spine=6, head=3, **_near(0.14, -0.22), **_GUARD, **_STANCE, weapon=w("r", -70)),            # chop
+        Pose(spine=16, head=8, **_near(0.26, 0.02), l_sh=-10, l_el=40, dx=0.025, **_STANCE, weapon=w("r", 10)),
+        Pose(spine=20, head=10, **_near(0.22, 0.14), l_sh=-15, l_el=40, dx=0.03, **_STANCE, weapon=w("r", 55)),
+        Pose(spine=10, head=6, **_near(0.14, 0.14), **_GUARD, dx=0.01, **_STANCE, weapon=w("r", -10)),
+        Pose(spine=5, head=4, **_near(0.12, 0.14), **_GUARD, **_STANCE, weapon=w("r", -50)),
+    ]
+
+
+def a2d() -> list[Pose]:
+    """One-handed rising slash: the blade drops low behind the body, then sweeps up in front to above the head."""
+    low = dict(r_hip=24, r_knee=24, l_hip=-18, l_knee=14)
+    return [
+        Pose(spine=5, head=4, **_near(0.12, 0.14), **_GUARD, **_STANCE, weapon=w("r", -50)),             # ready
+        Pose(spine=8, head=5, **_near(-0.10, 0.18), **_GUARD, **low, weapon=w("r", 140)),                # drop
+        Pose(spine=12, head=6, **_near(-0.04, 0.24), **_GUARD, dx=0.005, **low, weapon=w("r", 120)),
+        Pose(spine=6, head=4, **_near(0.18, 0.16), **_GUARD, dx=0.015, **_STANCE, weapon=w("r", 30)),    # rising
+        Pose(spine=-4, head=0, **_near(0.26, -0.06), l_sh=-10, l_el=40, dx=0.025, **_STANCE, weapon=w("r", -50)),
+        Pose(spine=-8, head=-3, **_near(0.16, -0.24), l_sh=-15, l_el=40, dx=0.025, **_STANCE,
+             weapon=w("r", -100)),                                                                         # top
+        Pose(spine=0, head=2, **_near(0.14, 0.06), **_GUARD, dx=0.012, **_STANCE, weapon=w("r", -60)),
+        Pose(spine=5, head=4, **_near(0.12, 0.14), **_GUARD, **_STANCE, weapon=w("r", -50)),
+    ]
+
+
+def _dual(r: tuple, ra: float, lft: tuple, la: float, **kw) -> Pose:
+    """A dual-wield pose: the near hand's blade (r: wrist from the near shoulder, angle) in front of the body, the
+    far hand's behind it."""
+    return Pose(**_near(*r), **_far(*lft), weapon=w("r", ra), weapon2=w("l", la, "behind"), **kw)
+
+
+def a8a() -> list[Pose]:
+    """Dual wielding, alternating slashes: the near blade cuts down while the far one guards, then the far blade
+    cuts as the near one pulls back (the common two-hit combo; Spine's way: one arm's keys shifted in time)."""
+    rd = dict(r=(0.12, 0.12), ra=-40, lft=(0.14, 0.10), la=-30)
+    return [
+        _dual(**rd, spine=5, head=4, **_STANCE),                                                          # ready
+        _dual((-0.02, -0.24), -150, (0.14, 0.08), -30, spine=-4, head=1, **_STANCE),                     # near up
+        _dual((0.26, 0.04), 30, (0.12, 0.10), -40, spine=12, head=6, dx=0.02, **_STANCE),                # near cut
+        _dual((0.12, 0.20), 80, (0.0, -0.24), -140, spine=4, head=3, dx=0.02, **_STANCE),                # far up
+        _dual((0.04, 0.16), -20, (0.27, 0.0), 20, spine=14, head=7, dx=0.035, **_STANCE),                # far cut
+        _dual((0.06, 0.16), -25, (0.14, 0.20), 75, spine=10, head=6, dx=0.035, **_STANCE),
+        _dual((0.10, 0.14), -40, (0.12, 0.12), -30, spine=7, head=5, dx=0.015, **_STANCE),               # recover
+        _dual(**rd, spine=5, head=4, dx=0.005, **_STANCE),
+    ]
+
+
+def a8b() -> list[Pose]:
+    """Dual wielding, cross slash: both blades raised over the head, then cut down together on crossing paths."""
+    rd = dict(r=(0.12, 0.12), ra=-40, lft=(0.14, 0.10), la=-30)
+    return [
+        _dual(**rd, spine=5, head=4, **_STANCE),                                                          # ready
+        _dual((0.0, -0.25), -130, (0.04, -0.25), -60, spine=-2, head=0, **_STANCE),                      # raise
+        _dual((-0.04, -0.22), -160, (0.0, -0.24), -110, spine=-6, head=-2, dx=-0.01, **_STANCE),         # wind
+        _dual((0.22, -0.06), -10, (0.20, -0.02), -60, spine=10, head=5, dx=0.02, **_STANCE),             # cut
+        _dual((0.24, 0.12), 50, (0.22, 0.14), 10, spine=18, head=9, dx=0.035, **_STANCE),                # cross
+        _dual((0.16, 0.22), 80, (0.18, 0.22), 40, spine=16, head=8, dx=0.035, **_STANCE),
+        _dual((0.12, 0.12), -40, (0.14, 0.10), -30, spine=8, head=5, dx=0.012, **_STANCE),              # recover
+        _dual(**rd, spine=5, head=4, **_STANCE),
+    ]
+
+
 TEMPLATES = {
     "idle": dict(fn=idle, animation="idle", variant=None, name_vi="Đứng yên", grip="optional",
                  kinds=["one_handed", "two_handed", "polearm", "bow", "staff"], prompt="standing, idle"),
@@ -306,6 +519,29 @@ TEMPLATES = {
                prompt="holding a staff, arm raised forward, clenched hand"),
     "a7": dict(fn=a7, animation="attack", variant="a7", name_vi="Tay trái tung chiêu", grip="always",
                kinds=["one_handed", "staff"], prompt="casting spell, arm outstretched forward, open palm, other hand clenched"),
+    "jump": dict(fn=jump, animation="jump", variant=None, name_vi="Nhảy", grip="optional",
+                 kinds=["one_handed", "two_handed", "polearm", "bow", "staff"], prompt="jumping"),
+    "fall": dict(fn=fall, animation="fall", variant=None, name_vi="Rơi", grip="optional",
+                 kinds=["one_handed", "two_handed", "polearm", "bow", "staff"], prompt="falling, arms raised"),
+    "hit": dict(fn=hit, animation="hit", variant=None, name_vi="Bị đánh", grip="optional",
+                kinds=["one_handed", "two_handed", "polearm", "bow", "staff"], prompt="getting hit, recoiling"),
+    "death": dict(fn=death, animation="death", variant=None, name_vi="Gục ngã", grip="optional",
+                  kinds=["one_handed", "two_handed", "polearm", "bow", "staff"],
+                  prompt="falling backward, lying on back, defeated"),
+    "a3": dict(fn=a3, animation="attack", variant="a3", name_vi="Vũ khí nặng hai tay", grip="always",
+               kinds=["two_handed"], prompt="two-handed overhead smash, both hands on the hilt, clenched hands"),
+    "a4": dict(fn=a4, animation="attack", variant="a4", name_vi="Vũ khí cán dài", grip="always", kinds=["polearm"],
+               prompt="spear thrust, lunging forward, both hands holding a shaft, clenched hands"),
+    "a2b": dict(fn=a2b, animation="attack", variant="a2b", name_vi="Một tay — đâm", grip="always",
+                kinds=["one_handed"], prompt="lunging stab, arm thrust straight forward, clenched hand"),
+    "a2c": dict(fn=a2c, animation="attack", variant="a2c", name_vi="Một tay — bổ từ trên xuống", grip="always",
+                kinds=["one_handed"], prompt="overhead chop, arm raised high then swung down, clenched hand"),
+    "a2d": dict(fn=a2d, animation="attack", variant="a2d", name_vi="Một tay — chém hất lên", grip="always",
+                kinds=["one_handed"], prompt="rising upward slash, arm swung up from low, clenched hand"),
+    "a8a": dict(fn=a8a, animation="attack", variant="a8a", name_vi="Song kiếm — chém luân phiên", grip="always",
+                kinds=["one_handed"], prompt="dual wielding, alternating slashes, both hands clenched"),
+    "a8b": dict(fn=a8b, animation="attack", variant="a8b", name_vi="Song kiếm — chém chéo", grip="always",
+                kinds=["one_handed"], prompt="dual wielding, cross slash with both arms, both hands clenched"),
 }
 
 
@@ -323,6 +559,8 @@ def build(tid: str) -> dict:
             fr["open"] = list(p.open)
         if spec["grip"] != "never":
             fr["weapon"] = p.weapon or {"hand": "r", "angle": 0.0, "layer": "front", "stage": 1}
+            if p.weapon2:
+                fr["weapon2"] = p.weapon2
         frames.append(fr)
     return {"id": tid, "animation": spec["animation"], "variant": spec["variant"], "name_vi": spec["name_vi"],
             "status": spec.get("status", "Proposed"), "grip": spec["grip"], "weapon_kinds": spec["kinds"],
@@ -358,8 +596,9 @@ def contact_sheet(tid: str, cell: int = 256):
         sk = Skeleton([None if q is None else (q[0] * scale + ox, q[1] * scale + oy) for q in fr["points"]])
         img = draw_openpose(sk, (cell, cell), stick_width=3)
         cv2.line(img, (0, int(oy)), (cell, int(oy)), (90, 90, 90), 1)
-        wd = fr.get("weapon")
-        if wd:
+        for wd in (fr.get("weapon"), fr.get("weapon2")):
+            if not wd:
+                continue
             el = sk.points[RELB if wd["hand"] == "r" else LELB]
             wr = sk.points[RWRI if wd["hand"] == "r" else LWRI]
             hx, hy = wr[0] + (wr[0] - el[0]) * 0.3, wr[1] + (wr[1] - el[1]) * 0.3

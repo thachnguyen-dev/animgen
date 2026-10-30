@@ -113,9 +113,6 @@ def test_grip_rules(session, hero):
     seen = []
     draw = session.engine.drawer.draw
     session.engine.drawer.draw = lambda req: seen.append(req.hands_gripping) or draw(req)
-    with pytest.raises(AppError) as e:
-        session.prepare("jump")
-    assert e.value.code == "animation_not_ready"
     for anim, asked, gripping in (("a1a", True, False),   # unarmed: never
                                   ("a2", False, True),    # made for a weapon: always
                                   ("a7", None, True),
@@ -179,6 +176,18 @@ def test_weapon_attack_grips_and_exports_hand_anchors(session, tmp_path):
         assert f["x"] == pytest.approx((canvas - 1 - hx) * k, abs=0.02)   # mirrored back: the character faces left
         assert f["y"] == pytest.approx(hy * k, abs=0.02)
         assert f["angle"] == pytest.approx((180.0 - tf.weapon.angle + 180.0) % 360.0 - 180.0, abs=0.02)
+
+
+def test_dual_wield_exports_both_hands(session, hero, tmp_path):
+    import json
+    session.set_character(str(hero))
+    run(lambda task: session.generate(task, "a8a", None))
+    t = run(lambda task: session.export(task, str(tmp_path / "out"), 256))
+    js = [p for p in t.result["files"] if p.endswith("_weapon.json")]
+    data = json.load(open(js[0], encoding="utf-8"))
+    for f in data["frames"]:
+        assert f["weapon"] and f["hand"] == "near" and f["second"]["hand"] == "far"
+        assert f["second"]["layer"] == "behind" and (f["x"], f["y"]) != (f["second"]["x"], f["second"]["y"])
 
 
 @pytest.mark.parametrize("anim", ["a1a", "idle"])

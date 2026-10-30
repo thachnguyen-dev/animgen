@@ -12,6 +12,7 @@ File format (``template_data/<id>.json``)::
       "frames": [                                   # exactly 8
         {"points": [18 points], "contact": "ground" | "air",
          "weapon": {"hand": "r" | "l", "angle": 0.0, "layer": "front" | "behind", "stage": 1},   # grip != never
+         "weapon2": {...},                         # optional, dual wielding: the other hand's weapon, same format
          "open": ["l"]}                            # optional: hands drawn as an open palm, others are fists
       ]
     }
@@ -41,18 +42,23 @@ ANIMATIONS = [
     ("idle", "idle", None, "Đứng yên", True),
     ("walk", "walk", None, "Đi bộ", True),
     ("run", "run", None, "Chạy", True),
-    ("jump", "jump", None, "Nhảy", False),
-    ("fall", "fall", None, "Rơi", False),
-    ("hit", "hit", None, "Bị đánh", False),
-    ("death", "death", None, "Gục ngã", False),
+    ("jump", "jump", None, "Nhảy", True),
+    ("fall", "fall", None, "Rơi", True),
+    ("hit", "hit", None, "Bị đánh", True),
+    ("death", "death", None, "Gục ngã", True),
     ("a1a", "attack", "a1a", "Tay không — đấm", True),
     ("a1b", "attack", "a1b", "Tay không — đá", True),
     ("a2", "attack", "a2", "Vũ khí một tay", True),
-    ("a3", "attack", "a3", "Vũ khí nặng hai tay", False),
-    ("a4", "attack", "a4", "Vũ khí cán dài", False),
+    ("a2b", "attack", "a2b", "Một tay — đâm", True),
+    ("a2c", "attack", "a2c", "Một tay — bổ từ trên xuống", True),
+    ("a2d", "attack", "a2d", "Một tay — chém hất lên", True),
+    ("a3", "attack", "a3", "Vũ khí nặng hai tay", True),
+    ("a4", "attack", "a4", "Vũ khí cán dài", True),
     ("a5", "attack", "a5", "Cung", True),
     ("a6", "attack", "a6", "Gậy phép", True),
     ("a7", "attack", "a7", "Tay trái tung chiêu", True),
+    ("a8a", "attack", "a8a", "Song kiếm — chém luân phiên", True),
+    ("a8b", "attack", "a8b", "Song kiếm — chém chéo", True),
 ]
 
 
@@ -73,6 +79,7 @@ class TemplateFrame:
     grounded: bool
     weapon: WeaponPose | None
     open_hands: tuple[str, ...] = ()    # "r" near, "l" far: drawn as an open palm in this frame
+    weapon2: WeaponPose | None = None   # dual wielding: the other hand's weapon
 
 
 @dataclass
@@ -112,6 +119,15 @@ def _parse_points(data: object, where: str) -> Skeleton:
     return s
 
 
+def _weapon(w: object, where: str) -> WeaponPose:
+    if not isinstance(w, dict):
+        raise TemplateError(f"{where}: bad weapon data")
+    hand, layer, stage = w.get("hand"), w.get("layer"), int(w.get("stage", 1))
+    if hand not in ("r", "l") or layer not in ("front", "behind") or stage not in (1, 2, 3):
+        raise TemplateError(f"{where}: bad weapon data")
+    return WeaponPose(hand=hand, angle=float(w.get("angle", 0.0)), layer=layer, stage=stage)
+
+
 def parse_template(data: dict) -> MotionTemplate:
     tid = str(data.get("id", "?"))
     frames_raw = data.get("frames")
@@ -130,20 +146,21 @@ def parse_template(data: dict) -> MotionTemplate:
         contact = fr.get("contact", "ground")
         if contact not in ("ground", "air"):
             raise TemplateError(f"{tid} frame {i + 1}: contact is ground or air")
-        wp = None
+        wp = wp2 = None
         w = fr.get("weapon")
         if grip != "never":
             if not isinstance(w, dict):
                 raise TemplateError(f"{tid} frame {i + 1}: weapon data is required when the hands can grip")
-            hand, layer, stage = w.get("hand"), w.get("layer"), int(w.get("stage", 1))
-            if hand not in ("r", "l") or layer not in ("front", "behind") or stage not in (1, 2, 3):
-                raise TemplateError(f"{tid} frame {i + 1}: bad weapon data")
-            wp = WeaponPose(hand=hand, angle=float(w.get("angle", 0.0)), layer=layer, stage=stage)
+            wp = _weapon(w, f"{tid} frame {i + 1}")
+            if fr.get("weapon2") is not None:
+                wp2 = _weapon(fr["weapon2"], f"{tid} frame {i + 1}")
+                if wp2.hand == wp.hand:
+                    raise TemplateError(f"{tid} frame {i + 1}: the two weapons are in the same hand")
         open_hands = fr.get("open", [])
         if not isinstance(open_hands, list) or not set(open_hands) <= {"r", "l"}:
             raise TemplateError(f"{tid} frame {i + 1}: open is a list of \"r\" and \"l\"")
         frames.append(TemplateFrame(skeleton=sk, grounded=(contact == "ground"), weapon=wp,
-                                    open_hands=tuple(open_hands)))
+                                    open_hands=tuple(open_hands), weapon2=wp2))
     return MotionTemplate(
         id=tid, animation=str(data.get("animation", tid)), variant=data.get("variant"),
         name_vi=str(data.get("name_vi", tid)), status=str(data.get("status", "Proposed")),
