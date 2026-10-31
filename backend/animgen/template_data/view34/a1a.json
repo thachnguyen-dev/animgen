@@ -226,9 +226,6 @@
     null
    ],
    "contact": "ground",
-   "front": [
-    "arm_far"
-   ],
    "back": [
     "arm"
    ]
@@ -306,9 +303,6 @@
     null
    ],
    "contact": "ground",
-   "front": [
-    "arm_far"
-   ],
    "back": [
     "arm"
    ]

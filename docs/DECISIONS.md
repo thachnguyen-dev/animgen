@@ -378,6 +378,9 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
 - The character's angle ("side" or "34") is guessed from the skeleton (both eyes found and the shoulders or hips
   well apart), shown in step 1 with "Đổi góc nhìn", and saved with the confirmed skeleton.
 - Known limit: the torso is one flat layer, so a turn shows in the shoulders and limbs, not in a narrowing chest.
+- Owner corrections (2026-10-31): the far (left) arm always stays behind the body; the kick swings across the
+  picture at full length and a little higher (it shrank toward the viewer); the bow is drawn level across the
+  picture (the chest turned toward profile) instead of back into it.
 - Test character: dev/tools/shape_character.py --view 34 (drawn from the same 3D body) renders all animations to
   D:/Game/ainm/pose_test_34.
 

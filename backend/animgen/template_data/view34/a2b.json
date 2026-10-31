@@ -159,10 +159,7 @@
     "angle": -35.3,
     "layer": "front",
     "stage": 1
-   },
-   "front": [
-    "arm_far"
-   ]
+   }
   },
   {
    "points": [
@@ -243,9 +240,6 @@
     "layer": "front",
     "stage": 1
    },
-   "front": [
-    "arm_far"
-   ],
    "back": [
     "arm"
    ]
@@ -329,9 +323,6 @@
     "layer": "front",
     "stage": 1
    },
-   "front": [
-    "arm_far"
-   ],
    "back": [
     "arm"
    ]
@@ -734,10 +725,7 @@
     "angle": -35.3,
     "layer": "front",
     "stage": 1
-   },
-   "front": [
-    "arm_far"
-   ]
+   }
   }
  ],
  "view": "34"

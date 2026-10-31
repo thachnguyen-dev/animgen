@@ -509,10 +509,7 @@
     "angle": 51.8,
     "layer": "behind",
     "stage": 1
-   },
-   "front": [
-    "arm_far"
-   ]
+   }
   },
   {
    "points": [

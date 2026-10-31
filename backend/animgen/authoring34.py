@@ -11,9 +11,12 @@ swing turned and foreshortened. What a side view cannot show is added in 3D, fro
 - the chest turns with the striking arm: a slash or punch winds the torso back and swings it through, a two-handed
   or spear stance turns the near shoulder back (the body follows the arm that leads);
 - the arms hang a little away from the body, so they do not vanish into the torso;
-- what is in front changes with the motion: the far arm reaching forward comes in front of the body, the far leg
-  stepping forward comes in front of the near one, the near arm swung far back goes behind the body. Each frame
-  says so ("front": meshes drawn over the body, "back": meshes drawn behind it).
+- what is in front changes with the motion: the far leg stepping forward comes in front of the near one, the near
+  arm swung far back goes behind the body. Each frame says so ("front": meshes drawn over the near leg or the
+  body, "back": meshes drawn behind it). The far arm always stays behind the body (owner, 2026-10-31: it looked
+  wrong in front of it);
+- a kick swings across the picture rather than toward the viewer, so the leg keeps its length and reach, and the
+  bow is drawn level across the picture, not back into it (owner, 2026-10-31).
 
 The view: the character faces right and toward the viewer. Its near side (the r_ limbs) is the one toward the
 viewer, which in a 3/4 front view is on the left of the body in the picture; the far arm shows at the front edge.
@@ -67,6 +70,8 @@ class Pose3:
     r_fore_out: float = 0.0          # the forearm's extra swing out (negative: across the body)
     l_fore_out: float = 0.0
     leg_out: float = LEG_OUT
+    r_leg_out: float | None = None   # one leg's own swing out (negative: across the body); None: leg_out
+    l_leg_out: float | None = None
 
 
 def _rot_y(v: tuple, deg: float) -> tuple:
@@ -149,11 +154,13 @@ def solve3(p3: Pose3) -> tuple[list, bool, list, list]:
         pts3[sho] = _add(neck, _rot_y((0.0, SHO_DROP, sign * SHO_HALF), chest))
         pts3[elb] = _add(pts3[sho], _scale(_rot_y(_dir(sh, out, sign), chest), UPPER_ARM))
         pts3[wri] = _add(pts3[elb], _scale(_rot_y(_dir(sh + el, out + fout, sign), chest), FOREARM))
-    for hip, kne, ank, hp, kn, sign in ((RHIP, RKNE, RANK, p.r_hip, p.r_knee, 1),
-                                        (LHIP, LKNE, LANK, p.l_hip, p.l_knee, -1)):
+    for hip, kne, ank, hp, kn, out, sign in (
+            (RHIP, RKNE, RANK, p.r_hip, p.r_knee, p3.r_leg_out, 1),
+            (LHIP, LKNE, LANK, p.l_hip, p.l_knee, p3.l_leg_out, -1)):
+        out = p3.leg_out if out is None else out
         pts3[hip] = _add(pelvis, _rot_y((0.0, 0.0, sign * HIP_HALF), hips))
-        pts3[kne] = _add(pts3[hip], _scale(_rot_y(_dir(hp, p3.leg_out, sign), hips), THIGH))
-        pts3[ank] = _add(pts3[kne], _scale(_rot_y(_dir(hp - kn, p3.leg_out, sign), hips), SHIN))
+        pts3[kne] = _add(pts3[hip], _scale(_rot_y(_dir(hp, out, sign), hips), THIGH))
+        pts3[ank] = _add(pts3[kne], _scale(_rot_y(_dir(hp - kn, out, sign), hips), SHIN))
 
     # On the ground in 3D: the lowest ankle (or, lying down, the lowest joint) at ankle height, then lifted.
     low = max(q[1] for q in pts3 if q is not None) if p.floor else max(pts3[RANK][1], pts3[LANK][1])
@@ -165,8 +172,6 @@ def solve3(p3: Pose3) -> tuple[list, bool, list, list]:
 
     front, back = [], []
     body = depth[NECK]
-    if (depth[LELB] + depth[LWRI]) / 2 > body + DEPTH_MARGIN:
-        front.append("arm_far")
     if (depth[LKNE] + depth[LANK]) / 2 > (depth[RKNE] + depth[RANK]) / 2:
         front.append("leg_far")
     if (depth[RELB] + depth[RWRI]) / 2 < body - DEPTH_MARGIN:
@@ -187,15 +192,21 @@ def lift(poses: list[Pose], **extra) -> list[Pose3]:
     return [Pose3(base=p, **extra) for p in poses]
 
 
-# Per template: anything set by hand on top of the automatic turns (frame index -> Pose3 fields).
+KICK_ACROSS = -40.0   # degrees the kicking leg swings across the body: its line then runs along the picture
+BOW_TURN = 32.0       # the archer's chest turned toward profile: the arrow (and the draw) level across the picture
+
+# Per template: anything set by hand on top of the automatic turns (frame index -> Pose3 fields; "base_<field>"
+# changes the side pose itself for this view).
 TWEAKS: dict[str, dict[int, dict]] = {
-    # The kick turns the hips into the kick and the chest a little against it.
-    "a1b": {2: dict(hips=-10.0, chest=8.0), 3: dict(hips=-14.0, chest=10.0), 4: dict(hips=-14.0, chest=10.0),
-            5: dict(hips=-8.0, chest=6.0)},
+    # The kick swings across the picture, full length, and a little higher than the side one (owner, 2026-10-31).
+    "a1b": {2: dict(r_leg_out=KICK_ACROSS / 2, hips=4.0),
+            3: dict(r_leg_out=KICK_ACROSS, hips=8.0, base_r_hip=100.0),
+            4: dict(r_leg_out=KICK_ACROSS, hips=8.0, base_r_hip=102.0),
+            5: dict(r_leg_out=KICK_ACROSS / 2, hips=4.0)},
     # Two hands on one grip: the near shoulder back, the chest turned toward profile so both arms reach the hilt.
     "a3": {i: dict(chest=-18.0, l_out=-6.0, r_out=4.0) for i in range(8)},
-    # The bow: the body side-on to the shot, as an archer stands.
-    "a5": {i: dict(chest=-30.0, hips=-10.0) for i in range(8)},
+    # The bow: the body side-on to the shot, the draw hand pulling level across the picture (owner, 2026-10-31).
+    "a5": {i: dict(chest=BOW_TURN, hips=BOW_TURN / 3, head=BOW_TURN * 0.6) for i in range(8)},
 }
 
 
@@ -203,7 +214,10 @@ def poses34(tid: str) -> list[Pose3]:
     out = lift(side.TEMPLATES[tid]["fn"]())
     for i, kw in TWEAKS.get(tid, {}).items():
         for k, v in kw.items():
-            setattr(out[i], k, v)
+            if k.startswith("base_"):
+                setattr(out[i].base, k[5:], v)
+            else:
+                setattr(out[i], k, v)
     return out
 
 

@@ -163,10 +163,7 @@
     "angle": -105.9,
     "layer": "front",
     "stage": 1
-   },
-   "front": [
-    "arm_far"
-   ]
+   }
   },
   {
    "points": [
@@ -246,10 +243,7 @@
     "angle": -108.0,
     "layer": "front",
     "stage": 1
-   },
-   "front": [
-    "arm_far"
-   ]
+   }
   },
   {
    "points": [
@@ -329,10 +323,7 @@
     "angle": -110.5,
     "layer": "front",
     "stage": 1
-   },
-   "front": [
-    "arm_far"
-   ]
+   }
   },
   {
    "points": [
@@ -412,10 +403,7 @@
     "angle": -108.0,
     "layer": "front",
     "stage": 1
-   },
-   "front": [
-    "arm_far"
-   ]
+   }
   },
   {
    "points": [
@@ -495,10 +483,7 @@
     "angle": -105.9,
     "layer": "front",
     "stage": 1
-   },
-   "front": [
-    "arm_far"
-   ]
+   }
   },
   {
    "points": [

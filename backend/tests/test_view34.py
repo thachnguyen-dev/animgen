@@ -71,10 +71,22 @@ def test_a_slash_winds_the_chest_back_and_swings_it_through():
     assert min(chest) < -10 and max(chest) > 10
 
 
-def test_the_far_arm_reaching_forward_is_drawn_in_front_of_the_body():
-    frames = load_template("a7", angle="34").frames           # the far hand casts forward
-    assert any("arm_far" in fr.front for fr in frames)
-    assert "arm_far" not in load_template("idle", angle="34").frames[0].front
+def test_the_far_arm_always_stays_behind_the_body():
+    # Owner, 2026-10-31: even reaching forward (A7 casts with the far hand) it is drawn behind the body.
+    for tid in READY:
+        assert not any("arm_far" in fr.front for fr in load_template(tid, angle="34").frames), tid
+
+
+def test_the_kick_keeps_its_length_and_the_bow_draws_level():
+    from animgen.skeleton import RANK, RHIP, RWRI
+    t = load_template("a1b", angle="34")
+    rest_leg = bone_length(t.rest, RHIP, 9) + bone_length(t.rest, 9, RANK)
+    kick = t.frames[4].skeleton
+    assert bone_length(kick, RHIP, 9) + bone_length(kick, 9, RANK) > 0.9 * rest_leg     # not shortened
+    assert kick.points[RANK][1] < kick.points[RHIP][1]                                     # at hip height or above
+    a5 = load_template("a5", angle="34").frames
+    xs = [f.skeleton.points[RWRI] for f in a5[2:5]]                # the draw: set-up to full draw
+    assert abs(xs[-1][1] - xs[0][1]) < 0.5 * abs(xs[-1][0] - xs[0][0])                    # more across than down
 
 
 def test_drawing_order_moves_the_meshes_of_one_frame():
@@ -100,10 +112,10 @@ def test_the_owners_angle_is_kept_and_picks_the_pose_set(session, hero):
     assert ch.to_json()["angle"] == "34" and ch.angle_source == "owner"
     ch = session.set_character(str(hero))                     # opened again: the choice is remembered
     assert ch.angle == "34" and ch.angle_source == "saved"
-    t = run(lambda task: session.generate(task, "a7", None, seed=1))
+    t = run(lambda task: session.generate(task, "walk", None, seed=1))
     assert t.state == "completed", t.error
     assert session.template.rest.points[LEYE] is not None
-    assert any("arm_far" in s.front for s in session.slots)
+    assert any("leg_far" in s.front for s in session.slots)
     with pytest.raises(Exception):
         session.set_angle("top")
 
