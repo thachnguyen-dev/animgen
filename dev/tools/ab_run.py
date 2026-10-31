@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, r"D:\Game\ainm\animgen\backend")
+sys.path.insert(0, r"C:\AnimGen\project\animgen\backend")
 import animgen.engines.diffusers_engine as de  # noqa: E402
 import animgen.puppet as puppet  # noqa: E402
 from animgen.server import make_engine  # noqa: E402

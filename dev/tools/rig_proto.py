@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PIL import Image
 
-sys.path.insert(0, r"D:\Game\ainm\animgen\backend")
+sys.path.insert(0, r"C:\AnimGen\project\animgen\backend")
 import animgen.engines.diffusers_engine as de  # noqa: E402
 from animgen.authoring import Pose, solve  # noqa: E402
 from animgen.engines.base import FrameRequest  # noqa: E402

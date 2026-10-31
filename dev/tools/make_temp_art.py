@@ -13,7 +13,7 @@ from pathlib import Path
 import torch
 from diffusers import AutoencoderKL, StableDiffusionXLPipeline
 
-sys.path.insert(0, r"D:\Game\ainm\animgen\backend")
+sys.path.insert(0, r"C:\AnimGen\project\animgen\backend")
 from animgen.engines.diffusers_engine import ToonOutRemover  # noqa: E402
 
 M = Path(r"C:\AnimGen\models")

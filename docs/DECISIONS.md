@@ -407,7 +407,7 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   side or 3/4, unless the owner chose the view ("Đổi góc nhìn"); that choice is saved with the skeleton
   (angle_owner) and never guessed over. Skeletons saved before this count as the owner's choice.
 - Test character: dev/tools/shape_character.py --view 34 (drawn from the same 3D body) renders all animations to
-  D:/Game/ainm/pose_test_34.
+  C:/AnimGen/project/pose_test_34.
 
 ## Pose editor (owner, 2026-10-31) — owner request Confirmed, plan approved by the owner ("yes approve all")
 

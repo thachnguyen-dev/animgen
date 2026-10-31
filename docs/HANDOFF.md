@@ -13,6 +13,9 @@ up. Decisions are in `DECISIONS.md`. The dated sections further down are the his
 - Pose editor (998de23), tested and accepted by the owner 2026-10-31: the owner poses a sample character in 8
   frames and saves it as an animation for that view (<data>/poses/u_*.json).
 - Published to C:/AnimGen after every change (publish only with the app closed).
+- Location (2026-10-31, owner: the app is complete): everything lives in `C:\AnimGen\project`: this repo in
+  `animgen`, the owner's character images in `images`, the design docs in `design-docs`. Publish with
+  `scripts\publish.ps1 -Data C:\AnimGen`. Build output, test renders and caches were deleted.
 
 ## Next steps
 
@@ -47,7 +50,7 @@ up. Decisions are in `DECISIONS.md`. The dated sections further down are the his
 ## Test art (temporary, made by Claude — not the owner's)
 
 `dev/test_art/`: `test_hero.png` (Animagine + ToonOut, faces left), `test_sword.png` (grip 70,35 / tip 548,35),
-`test_bow_1..3.png` (grip 210,410 / tips 183,40 · 165,50 · 149,60). The owner's images in `D:\Game\ainm\images` show
+`test_bow_1..3.png` (grip 210,410 / tips 183,40 · 165,50 · 149,60). The owner's images in `C:\AnimGen\project\images` show
 characters holding weapons and cannot be used as weapon inputs; the owner has no separated art yet and asked for a
 recommendation (separate vs combined) after testing.
 
@@ -120,7 +123,7 @@ PowerShell scripts.
   scripts/download_models.py); psd-tools in both requirements files. Real runs: knight 380 s for the layers from
   an existing drawing, archer 328 s. Sheets in the session scratchpad only (test art).
 - Every pose done (20 animations, DECISIONS.md "Every pose first"); shape test character
-  (dev/tools/shape_character.py, dev/test_art/test_shapes.png) renders all of them to D:/Game/ainm/pose_test for the
+  (dev/tools/shape_character.py, dev/test_art/test_shapes.png) renders all of them to C:/AnimGen/project/pose_test for the
   owner to tune poses.
 - Part map flow (DECISIONS.md "Part map from the owner's own image"): POST /rig (part "parts"|"hand"),
   /rig/rebuild, /rig/map; RigInfo.Stage in the app; step 2 shows the map, "Vẽ phần bị che", "Tách lại",

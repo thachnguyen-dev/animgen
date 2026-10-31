@@ -5,7 +5,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-sys.path.insert(0, r"D:\Game\ainm\animgen\backend")
+sys.path.insert(0, r"C:\AnimGen\project\animgen\backend")
 from animgen import puppet  # noqa: E402
 from animgen.server import make_engine  # noqa: E402
 from animgen.session import Session  # noqa: E402

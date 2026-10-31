@@ -5,12 +5,12 @@ the character image, confirms its skeleton and writes its rig (the body-part lay
 into the app's data folder. No AI drawing is needed: opening the image in the app finds the rig at once, and every
 animation is made in seconds. Then it renders all the animations into sheets and GIFs.
 
-usage: python shape_character.py [--view side|34] [--data C:/AnimGen] [--out D:/Game/ainm/pose_test]
+usage: python shape_character.py [--view side|34] [--data C:/AnimGen] [--out C:/AnimGen/project/pose_test]
 (run with the app closed: it writes into the app's data folder)
 
 --view 34 draws the character in a three-quarter view (owner, 2026-10-31): turned a little toward the viewer, so the
 far shoulder and hip sit further back, the torso is wider, both eyes show and the far limbs are in plain view. It goes
-to test_shapes_34.png and D:/Game/ainm/pose_test_34 by default.
+to test_shapes_34.png and C:/AnimGen/project/pose_test_34 by default.
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def main() -> None:
     args = ap.parse_args()
     view = args.view
     data = Path(args.data)
-    out = Path(args.out or ("D:/Game/ainm/pose_test" if view == "side" else "D:/Game/ainm/pose_test_34"))
+    out = Path(args.out or ("C:/AnimGen/project/pose_test" if view == "side" else "C:/AnimGen/project/pose_test_34"))
     image_path = IMAGE if view == "side" else IMAGE_34
 
     # 1-3. The character image, its skeleton confirmed and its rig written into the app's data folder.

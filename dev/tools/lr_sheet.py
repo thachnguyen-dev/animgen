@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-sys.path.insert(0, r"D:\Game\ainm\animgen\backend")
+sys.path.insert(0, r"C:\AnimGen\project\animgen\backend")
 from animgen.server import make_engine  # noqa: E402
 from animgen.session import Session  # noqa: E402
 from animgen.skeleton import (LANK, LELB, LHIP, LKNE, LSHO, LWRI, NECK, NOSE, RANK, RELB, RHIP, RKNE,  # noqa: E402

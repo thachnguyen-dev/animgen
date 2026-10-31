@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-sys.path.insert(0, r"D:\Game\ainm\animgen\backend")
+sys.path.insert(0, r"C:\AnimGen\project\animgen\backend")
 import animgen.engines.diffusers_engine as de  # noqa: E402
 from animgen import config  # noqa: E402
 from animgen.server import make_engine  # noqa: E402

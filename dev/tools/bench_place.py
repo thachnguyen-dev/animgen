@@ -11,7 +11,7 @@ import numpy as np
 import torch
 from PIL import Image
 
-sys.path.insert(0, r"D:\Game\ainm\animgen\backend")
+sys.path.insert(0, r"C:\AnimGen\project\animgen\backend")
 from diffusers.hooks import apply_group_offloading  # noqa: E402
 
 import animgen.engines.diffusers_engine as de  # noqa: E402

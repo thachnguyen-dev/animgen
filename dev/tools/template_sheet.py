@@ -4,7 +4,7 @@ import sys
 
 from PIL import Image, ImageDraw
 
-sys.path.insert(0, r"D:\Game\ainm\animgen\backend")
+sys.path.insert(0, r"C:\AnimGen\project\animgen\backend")
 from animgen.skeleton import (LANK, LELB, LHIP, LKNE, LSHO, LWRI, NECK, NOSE, RANK, RELB, RHIP, RKNE,  # noqa: E402
                               RSHO, RWRI)
 from animgen.templates import load_template  # noqa: E402
