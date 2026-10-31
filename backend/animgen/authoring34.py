@@ -80,6 +80,9 @@ class Pose3:
     far_behind: bool = False         # joined: the far hand on the handle behind the near one (toward the body)
     near_elbow_forward: bool = False # the near elbow bent forward of the shoulder and the hand (a two-handed grip)
     far_arm_front: bool = False      # the far arm drawn over the head and the body (a two-handed grip)
+    near_draw: float = 0.0           # the near hand pulled this far back toward the body, the elbow bent back
+    arm_turn: float = 0.0            # the arms' swing turned this much more than the chest (negative: across the
+                                     # picture rather than toward the viewer)
 
 
 def _rot_y(v: tuple, deg: float) -> tuple:
@@ -156,33 +159,38 @@ def solve3(p3: Pose3) -> tuple[list, bool, list, list]:
     pts3[LEYE] = head_point(HEAD_EYE, -EYE_HALF)
     pts3[REAR] = head_point(HEAD_EAR, EAR_HALF)
 
+    arms = chest + p3.arm_turn
     for sho, elb, wri, sh, el, out, fout, sign in (
             (RSHO, RELB, RWRI, p.r_sh, p.r_el, p3.r_out, p3.r_fore_out, 1),
             (LSHO, LELB, LWRI, p.l_sh, p.l_el, p3.l_out, p3.l_fore_out, -1)):
         pts3[sho] = _add(neck, _rot_y((0.0, SHO_DROP, sign * SHO_HALF), chest))
-        pts3[elb] = _add(pts3[sho], _scale(_rot_y(_dir(sh, out, sign), chest), UPPER_ARM))
-        pts3[wri] = _add(pts3[elb], _scale(_rot_y(_dir(sh + el, out + fout, sign), chest), FOREARM))
+        pts3[elb] = _add(pts3[sho], _scale(_rot_y(_dir(sh, out, sign), arms), UPPER_ARM))
+        pts3[wri] = _add(pts3[elb], _scale(_rot_y(_dir(sh + el, out + fout, sign), arms), FOREARM))
     if p3.near_elbow_forward:
         # The elbow out in front of both the shoulder and the hand (in the picture): the hands, with the weapon,
         # move the least distance forward or back that allows it.
-        pole = _rot_y(NEAR_POLE_FORWARD, chest)
+        pole = _rot_y(NEAR_POLE_FORWARD, arms)
         best = None
-        for off in sorted((k * 0.01 for k in range(-25, 26)), key=abs):
-            target = _add(pts3[RWRI], _rot_y((off, 0.0, 0.0), chest))
+        for off in sorted((k * 0.01 for k in range(-10, 11)), key=abs):
+            target = _add(pts3[RWRI], _rot_y((off, 0.0, 0.0), arms))
             elbow, wrist = _reach3(pts3[RSHO], target, pole)
             ex, sx, wx = project(elbow)[0], project(pts3[RSHO])[0], project(wrist)[0]
             if ex > sx + ELBOW_LEAD and ex > wx + ELBOW_LEAD:
                 best = (elbow, wrist)
                 break
         pts3[RELB], pts3[RWRI] = best or _reach3(pts3[RSHO], pts3[RWRI], pole)
+    if p3.near_draw:
+        # Drawn back: the shoulder stays, the elbow goes back past it and the hand comes back toward the body.
+        target = _add(pts3[RWRI], _rot_y((-p3.near_draw, 0.0, 0.0), chest))
+        pts3[RELB], pts3[RWRI] = _reach3(pts3[RSHO], target, _rot_y(NEAR_POLE_BACK, chest))
     if p3.joined:
         # The handle runs from the near hand to the far one as in the side pose, in the body's forward-down plane.
         sp = _side_points(p)
         handle = (sp[LWRI][0] - sp[RWRI][0], sp[LWRI][1] - sp[RWRI][1], 0.0)
         if p3.far_behind:
             handle = _scale(handle, -1.0)
-        target = _add(pts3[RWRI], _rot_y(handle, chest))
-        pts3[LELB], pts3[LWRI] = _reach3(pts3[LSHO], target, _rot_y(FAR_POLE, chest))
+        target = _add(pts3[RWRI], _rot_y(handle, arms))
+        pts3[LELB], pts3[LWRI] = _reach3(pts3[LSHO], target, _rot_y(FAR_POLE, arms))
     for hip, kne, ank, hp, kn, out, sign in (
             (RHIP, RKNE, RANK, p.r_hip, p.r_knee, p3.r_leg_out, 1),
             (LHIP, LKNE, LANK, p.l_hip, p.l_knee, p3.l_leg_out, -1)):
@@ -212,6 +220,7 @@ def solve3(p3: Pose3) -> tuple[list, bool, list, list]:
 
 FAR_POLE = (-0.2, 1.0, -0.6)   # the far elbow of a two-handed grip bends down, out and a little back
 NEAR_POLE_FORWARD = (1.0, 0.25, 0.3)   # the near elbow of a two-handed grip points forward (owner, 2026-10-31)
+NEAR_POLE_BACK = (-1.0, 0.4, 0.0)      # a drawn-back arm: the elbow bends back and a little down
 ELBOW_LEAD = 0.01     # template units: how far the elbow is at least in front of the shoulder and the hand
 
 
@@ -246,6 +255,8 @@ def lift(poses: list[Pose], **extra) -> list[Pose3]:
     return [Pose3(base=p, **extra) for p in poses]
 
 
+SMASH_ACROSS = 63.0   # the two-handed swing turned so it travels along the picture (with the chest's -18: profile)
+SMASH_FRAMES = (4, 5, 6)   # the swing, smash and impact: arms reaching out, the elbow between shoulder and hand
 SPEAR_TURN = 10.0     # the spear's chest turned a little toward the lead (near) hand
 SPEAR_ACROSS = -35.0  # the lead arm swings across the body, so it reaches along the picture, not at the viewer
 KICK_ACROSS = -40.0   # degrees the kicking leg swings across the body: its line then runs along the picture
@@ -260,16 +271,20 @@ TWEAKS: dict[str, dict[int, dict]] = {
             4: dict(r_leg_out=KICK_ACROSS, hips=8.0, base_r_hip=102.0),
             5: dict(r_leg_out=KICK_ACROSS / 2, hips=4.0)},
     # Two hands on one grip: the near shoulder back, the chest turned toward profile so both arms reach the hilt.
-    # The near elbow always forward of the shoulder and the hand, the far arm over the head and body (owner,
+    # The far arm over the head and body; the swing runs across the picture, not at the viewer; the near elbow in
+    # front of the shoulder and the hands while the hands are held in, the arms reaching out on the smash (owner,
     # 2026-10-31).
-    "a3": {i: dict(chest=-18.0, joined=True, near_elbow_forward=True, far_arm_front=True) for i in range(8)},
+    "a3": {i: dict(chest=-18.0, arm_turn=SMASH_ACROSS, joined=True, near_elbow_forward=i not in SMASH_FRAMES,
+                   far_arm_front=True) for i in range(8)},
     "a4": {i: dict(joined=True, far_behind=True, chest=SPEAR_TURN, r_out=SPEAR_ACROSS) for i in range(8)},
     # The bow: the body side-on to the shot, the draw hand pulling level across the picture; the hands stay fists
     # (owner, 2026-10-31).
     "a5": {i: dict(chest=BOW_TURN, hips=BOW_TURN / 3, head=BOW_TURN * 0.6, base_open=()) for i in range(8)},
 }
-SPEAR_REACH = 0.03    # the spear's near hand this much further forward than in the side view (owner, 2026-10-31:
-SPEAR_LEAST = 0.05    # further back than the first try), and never closer in than this
+SPEAR_REACH = 0.12    # the spear's near hand this much further forward than in the side view, the arm reaching out
+SPEAR_LEAST = 0.13    # and never closer in than this
+SPEAR_DRAW = 0.08     # in the wind-up frames the right forearm and hand come back this far, the elbow behind
+SPEAR_DRAWN = (0, 1, 2, 6, 7)   # (owner, 2026-10-31: only the right arm back, the side pose otherwise as it was)
 
 
 def poses34(tid: str) -> list[Pose3]:
@@ -286,6 +301,8 @@ def poses34(tid: str) -> list[Pose3]:
             x = max(sp[RWRI][0] - sp[RSHO][0] + SPEAR_REACH, SPEAR_LEAST)
             y = sp[RWRI][1] - sp[RSHO][1]
             p3.base.r_sh, p3.base.r_el = side.reach(x, y)
+        for i in SPEAR_DRAWN:
+            out[i].near_draw = SPEAR_DRAW
     return out
 
 

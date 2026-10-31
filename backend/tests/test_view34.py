@@ -79,11 +79,27 @@ def test_the_far_arm_always_stays_behind_the_body():
         assert all(fronts) if tid == "a3" else not any(fronts), tid
 
 
-def test_the_two_handed_near_elbow_leads():
-    from animgen.skeleton import RELB, RSHO, RWRI
-    for fr in load_template("a3", angle="34").frames:
+def test_the_two_handed_near_elbow_leads_and_the_smash_runs_across():
+    from animgen.authoring34 import SMASH_FRAMES
+    from animgen.skeleton import NECK, RELB, RSHO, RWRI
+    for i, fr in enumerate(load_template("a3", angle="34").frames):
         p = fr.skeleton.points
-        assert p[RELB][0] > max(p[RSHO][0], p[RWRI][0])             # forward of both the shoulder and the hand
+        assert "arm" not in fr.back
+        if i in SMASH_FRAMES:
+            assert p[RELB][0] > p[RSHO][0]                          # reaching out: the elbow still not back
+        else:
+            assert p[RELB][0] > max(p[RSHO][0], p[RWRI][0])         # forward of both the shoulder and the hand
+    impact = load_template("a3", angle="34").frames[6].skeleton.points
+    assert impact[RWRI][0] - impact[NECK][0] > 0.10                 # the smash ends out along the picture
+
+
+def test_the_spear_wind_up_pulls_the_near_arm_back():
+    from animgen.authoring34 import SPEAR_DRAWN
+    from animgen.skeleton import RELB, RSHO
+    for i, fr in enumerate(load_template("a4", angle="34").frames):
+        p = fr.skeleton.points
+        if i in SPEAR_DRAWN:
+            assert p[RELB][0] < p[RSHO][0]                          # the elbow behind the shoulder
         assert "arm" not in fr.back
 
 

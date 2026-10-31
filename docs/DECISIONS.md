@@ -391,6 +391,13 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   arm is drawn over the head and body in every frame (it used to vanish behind the body in 5 of 8); on the spear
   (A4) the right arm sits further back throughout (the near hand only 0.03 ahead of the side pose, at least 0.05
   from the shoulder) and is never put behind the body.
+- Fourth round (owner, 2026-10-31): the two-handed smash (A3) travels across the picture, not toward the viewer:
+  the arms' swing is turned to profile (SMASH_ACROSS) while the chest keeps its turn. The elbow-forward rule now
+  holds while the hands are held in (ready, lift, overhead, recover); on the swing, smash and impact the arms reach
+  out and the elbow sits between the shoulder and the hand (still in front of the shoulder) — an arm reaching out
+  cannot have its elbow past the hand, and forcing it pulled the smash back into the body. The spear (A4) is back
+  to the second-round arm; only in the wind-up frames (1-3, 7-8) the right forearm and hand come back 0.08 with
+  the elbow behind the shoulder (the third round had pulled the whole side pose back, which bent the left arm).
 - Test character: dev/tools/shape_character.py --view 34 (drawn from the same 3D body) renders all animations to
   D:/Game/ainm/pose_test_34.
 
