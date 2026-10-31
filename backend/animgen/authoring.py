@@ -144,11 +144,16 @@ def _far(x: float, y: float, elbow: str = "down") -> dict:
     return {"l_sh": sh, "l_el": el}
 
 
-def _both(x: float, y: float, angle: float, gap: float) -> dict:
+def _both(x: float, y: float, angle: float, gap: float, elbow: str = "down") -> dict:
     """Both hands on one handle: the near hand at (x, y) from the near shoulder, the far hand ``gap`` further along
     the handle toward the tip (``angle``, image degrees; a negative gap is toward the pommel)."""
     a = math.radians(angle)
-    return {**_near(x, y), **_far(x + math.cos(a) * gap, y + math.sin(a) * gap)}
+    return {**_near(x, y, elbow), **_far(x + math.cos(a) * gap, y + math.sin(a) * gap)}
+
+
+def _both_back(x: float, y: float, angle: float, gap: float) -> dict:
+    """``_both`` with the near elbow behind the body, as the rear hand on a spear shaft."""
+    return _both(x, y, angle, gap, "back")
 
 
 # ------------------------------------------------------------------------------------------------------------
@@ -397,17 +402,17 @@ def a3() -> list[Pose]:
 
 def a4() -> list[Pose]:
     """Polearm (spear): the near hand at the back of the shaft, the far hand in front; draw back, step, thrust
-    forward with the body behind it, hold, pull back."""
+    forward with the body behind it, hold, pull back. The near elbow stays behind the body (owner, 2026-10-31)."""
     return [
-        Pose(spine=4, head=2, **_both(0.0, 0.17, -8, 0.14), **_STANCE, weapon=w("r", -8)),                # ready
-        Pose(spine=-4, head=0, **_both(-0.08, 0.15, -6, 0.13), dx=-0.012, **_STANCE, weapon=w("r", -6)),   # draw
-        Pose(spine=-2, head=0, **_both(-0.06, 0.15, -5, 0.13), r_hip=34, r_knee=22, l_hip=-18, l_knee=6,
+        Pose(spine=4, head=2, **_both_back(0.0, 0.17, -8, 0.14), **_STANCE, weapon=w("r", -8)),                # ready
+        Pose(spine=-4, head=0, **_both_back(-0.08, 0.15, -6, 0.13), dx=-0.012, **_STANCE, weapon=w("r", -6)),   # draw
+        Pose(spine=-2, head=0, **_both_back(-0.06, 0.15, -5, 0.13), r_hip=34, r_knee=22, l_hip=-18, l_knee=6,
              weapon=w("r", -5)),                                                                         # step
-        Pose(spine=12, head=6, **_both(0.10, 0.06, -3, 0.16), dx=0.04, **_LUNGE, weapon=w("r", -3)),      # thrust
-        Pose(spine=16, head=8, **_both(0.14, 0.04, -2, 0.15), dx=0.045, **_LUNGE, weapon=w("r", -2)),      # reach
-        Pose(spine=16, head=8, **_both(0.14, 0.045, -2, 0.15), dx=0.045, **_LUNGE, weapon=w("r", -2)),     # hold
-        Pose(spine=6, head=3, **_both(0.0, 0.14, -6, 0.14), dx=0.03, **_STANCE, weapon=w("r", -6)),       # pull
-        Pose(spine=4, head=2, **_both(0.0, 0.17, -8, 0.14), dx=0.01, **_STANCE, weapon=w("r", -8)),
+        Pose(spine=12, head=6, **_both_back(0.10, 0.06, -3, 0.16), dx=0.04, **_LUNGE, weapon=w("r", -3)),      # thrust
+        Pose(spine=16, head=8, **_both_back(0.14, 0.04, -2, 0.15), dx=0.045, **_LUNGE, weapon=w("r", -2)),      # reach
+        Pose(spine=16, head=8, **_both_back(0.14, 0.045, -2, 0.15), dx=0.045, **_LUNGE, weapon=w("r", -2)),     # hold
+        Pose(spine=6, head=3, **_both_back(0.0, 0.14, -6, 0.14), dx=0.03, **_STANCE, weapon=w("r", -6)),       # pull
+        Pose(spine=4, head=2, **_both_back(0.0, 0.17, -8, 0.14), dx=0.01, **_STANCE, weapon=w("r", -8)),
     ]
 
 
@@ -448,13 +453,14 @@ def a2c() -> list[Pose]:
 
 
 def a2d() -> list[Pose]:
-    """One-handed rising slash: the blade drops low behind the body, then sweeps up in front to above the head."""
+    """One-handed rising slash: the blade drops low behind the body, then sweeps up in front to above the head. While
+    the blade is low the near elbow is behind the body (owner, 2026-10-31)."""
     low = dict(r_hip=24, r_knee=24, l_hip=-18, l_knee=14)
     return [
         Pose(spine=5, head=4, **_near(0.12, 0.14), **_GUARD, **_STANCE, weapon=w("r", -50)),             # ready
-        Pose(spine=8, head=5, **_near(-0.10, 0.18), **_GUARD, **low, weapon=w("r", 140)),                # drop
-        Pose(spine=12, head=6, **_near(-0.04, 0.24), **_GUARD, dx=0.005, **low, weapon=w("r", 120)),
-        Pose(spine=6, head=4, **_near(0.18, 0.16), **_GUARD, dx=0.015, **_STANCE, weapon=w("r", 30)),    # rising
+        Pose(spine=8, head=5, **_near(-0.10, 0.18, "back"), **_GUARD, **low, weapon=w("r", 140)),                # drop
+        Pose(spine=12, head=6, **_near(-0.04, 0.24, "back"), **_GUARD, dx=0.005, **low, weapon=w("r", 120)),
+        Pose(spine=6, head=4, **_near(0.18, 0.16, "back"), **_GUARD, dx=0.015, **_STANCE, weapon=w("r", 30)),    # rising
         Pose(spine=-4, head=0, **_near(0.26, -0.06), l_sh=-10, l_el=40, dx=0.025, **_STANCE, weapon=w("r", -50)),
         Pose(spine=-8, head=-3, **_near(0.16, -0.24), l_sh=-15, l_el=40, dx=0.025, **_STANCE,
              weapon=w("r", -100)),                                                                         # top
