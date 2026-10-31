@@ -18,6 +18,18 @@ public partial class MainWindow : Window
 
     private void CheckSkeleton_Click(object sender, RoutedEventArgs e) => CheckSkeleton();
 
+    // ---- Step 2 pictures zoomed in (owner, 2026-10-31) ----
+
+    private void ZoomRig_Click(object sender, RoutedEventArgs e) => ShowZoomed(Vm.RigImage, Vm.RigImageName);
+
+    private void ZoomHand_Click(object sender, RoutedEventArgs e) => ShowZoomed(Vm.HandImage, "Bàn tay mở");
+
+    private void ShowZoomed(System.Windows.Media.ImageSource? image, string title)
+    {
+        if (image == null) return;
+        new ImageViewerWindow(image, title) { Owner = this }.ShowDialog();
+    }
+
     // ---- The pose editor (owner, 2026-10-31) ----
 
     private async void NewPose_Click(object sender, RoutedEventArgs e)

@@ -435,6 +435,14 @@ joints and body parts in every frame and saves the pose. Built as planned and ap
 - Not done: no keyboard way to move joints (the skeleton dialog's joint list was not copied); no undo beyond
   "Đặt lại khung này"; no per-frame weapon direction handle.
 
+## Step-2 pictures zoomed in (owner, 2026-10-31) — owner choices Confirmed
+
+The owner asked for a zoomed-in view of the character rig; chosen by the owner: the step-2 picture (and the open
+hand next to it), in a separate window. ImageViewerWindow opens from a click on either picture or its
+"Phóng to…" button: the mouse wheel zooms around the cursor (10 % to 1600 %), dragging pans, buttons "Vừa
+khung" (fits the drawn part of the picture, not the whole square canvas) / 100 % / 200 % / 400 %; from 200 % the
+pixels are drawn sharp (nearest neighbour) so the edges of each part can be judged.
+
 ## Not done on purpose
 
 - No free-form prompts, no batch generation, no automatic quality scoring, no Unity configuration files, no

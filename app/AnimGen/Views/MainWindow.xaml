@@ -172,32 +172,38 @@
                             <UniformGrid Columns="2" Visibility="{Binding HasRig, Converter={StaticResource BoolToVis}}">
                                 <StackPanel Margin="{StaticResource SpaceRight}">
                                     <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeThumb}"
-                                            BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}">
+                                            BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}"
+                                            Cursor="Hand" ToolTip="Bấm để xem phóng to" MouseLeftButtonUp="ZoomRig_Click">
                                         <Image Source="{Binding RigImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
                                                AutomationProperties.Name="{Binding RigImageName}"/>
                                     </Border>
                                     <TextBlock Style="{StaticResource TextMuted}" Text="{Binding RigCaption}"/>
-                                    <StackPanel Orientation="Horizontal" Margin="{StaticResource SpaceGap}">
+                                    <WrapPanel Margin="{StaticResource SpaceGap}">
+                                        <Button Content="Phóng to…" Click="ZoomRig_Click" Padding="8,4" Margin="{StaticResource SpaceRight}"
+                                                AutomationProperties.Name="{Binding RigImageName, StringFormat='Phóng to {0}'}"/>
                                         <Button Content="Tách lại" Command="{Binding RedrawRigPartCommand}" CommandParameter="parts"
                                                 AutomationProperties.Name="Tách lại các bộ phận" Padding="8,4"
                                                 Visibility="{Binding CanSplitAgain, Converter={StaticResource BoolToVis}}"/>
                                         <Button Content="Về bản đồ" Command="{Binding BackToMapCommand}"
                                                 AutomationProperties.Name="Về bản đồ bộ phận" Padding="8,4"
                                                 Visibility="{Binding IsPartsStage, Converter={StaticResource BoolToVis}}"/>
-                                    </StackPanel>
+                                    </WrapPanel>
                                 </StackPanel>
                                 <StackPanel>
                                     <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeThumb}"
-                                            BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}">
+                                            BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}"
+                                            Cursor="Hand" ToolTip="Bấm để xem phóng to" MouseLeftButtonUp="ZoomHand_Click">
                                         <Image Source="{Binding HandImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
                                                AutomationProperties.Name="Bàn tay mở"/>
                                     </Border>
                                     <TextBlock Style="{StaticResource TextMuted}"
                                                Text="Chỉ lấy bàn tay mở từ hình này, cho các khung tung chiêu."/>
-                                    <StackPanel Orientation="Horizontal" Margin="{StaticResource SpaceGap}">
+                                    <WrapPanel Margin="{StaticResource SpaceGap}">
+                                        <Button Content="Phóng to…" Click="ZoomHand_Click" Padding="8,4" Margin="{StaticResource SpaceRight}"
+                                                AutomationProperties.Name="Phóng to bàn tay mở"/>
                                         <Button Content="Vẽ lại" Command="{Binding RedrawRigPartCommand}" CommandParameter="hand"
                                                 Padding="8,4"/>
-                                    </StackPanel>
+                                    </WrapPanel>
                                 </StackPanel>
                             </UniformGrid>
                             <!-- The parts file covers both drawings, so its buttons span the step -->
