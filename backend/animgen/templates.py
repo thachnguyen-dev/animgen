@@ -192,15 +192,20 @@ def load_template(tid: str, directory: Path | None = None, angle: str = "side") 
         return parse_template(json.load(f))
 
 
-def available(directory: Path = TEMPLATE_DIR) -> list[dict]:
-    """The animation list for the UI, with whether each one can be generated in this version."""
+def available(angle: str = "side") -> list[dict]:
+    """The animation list for the UI, with whether each one can be generated in this version for a character
+    seen from ``angle`` (the 3/4 set has no two-handed weapon, owner 2026-10-31)."""
+    directory = template_dir(angle)
     out = []
     for tid, anim, variant, name, in_v1 in ANIMATIONS:
         path = directory / f"{tid}.json"
         entry = {"id": tid, "animation": anim, "variant": variant, "name_vi": name,
-                 "ready": bool(in_v1 and path.is_file()), "grip": "never", "weapon_kinds": [], "status": None}
+                 "ready": bool(in_v1 and path.is_file()), "grip": "never", "weapon_kinds": [], "status": None,
+                 # why it cannot be made: not in this version, or not for this view
+                 "missing": None if in_v1 and path.is_file() else ("version" if not in_v1 or angle == "side"
+                                                                      else "angle")}
         if path.is_file():
-            t = load_template(tid, directory)
+            t = load_template(tid, directory, angle)
             entry.update(grip=t.grip, weapon_kinds=t.weapon_kinds, status=t.status)
         out.append(entry)
     return out

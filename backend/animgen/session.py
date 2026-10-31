@@ -756,7 +756,8 @@ class Session:
         try:
             template = load_template(animation_id, angle=self.character.angle)
         except FileNotFoundError as exc:
-            raise AppError("animation_not_ready") from exc
+            # The 3/4 set leaves some out (A3, owner 2026-10-31).
+            raise AppError("animation_not_for_angle" if self.character.angle == "34" else "animation_not_ready")                 from exc
         return template
 
     # ------------------------------------------------------------------------------------------------------------

@@ -251,6 +251,7 @@ public sealed class MainViewModel : ObservableObject
     public string AnimationNote => SelectedAnimation switch
     {
         null => "",
+        { Ready: false, Missing: "angle" } => "Hoạt ảnh này không có cho nhân vật nhìn ba phần tư. Hãy chọn hoạt ảnh khác.",
         { Ready: false } => "Hoạt ảnh này chưa có trong phiên bản này.",
         { Grip: "always" } => "Tay nắm như đang cầm vũ khí. Khi xuất có kèm tệp vị trí tay (…_weapon.json) để gắn vũ khí trong game.",
         { Grip: "optional" } => "Nếu chọn tay nắm, khi xuất có kèm tệp vị trí tay (…_weapon.json) để gắn vũ khí trong game.",
@@ -340,13 +341,23 @@ public sealed class MainViewModel : ObservableObject
         _api = api;
         HealthReply h = await api.HealthAsync();
         IsDemo = h.Demo;
-        Animations.Clear();
-        foreach (AnimationInfo a in await api.AnimationsAsync()) Animations.Add(a);
-        SelectedAnimation = Animations.FirstOrDefault(a => a.Ready);
+        await ReloadAnimationsAsync();
         Fps = 8;
         Ready = true;
         SetStatus(StatusKind.Info, "Sẵn sàng. Hãy chọn ảnh nhân vật.");
         CommandManager.InvalidateRequerySuggested();
+    }
+
+    /// <summary>The list follows the character's view: the 3/4 set leaves A3 out (owner, 2026-10-31). The choice
+    /// stays when it can still be made.</summary>
+    private async Task ReloadAnimationsAsync()
+    {
+        if (_api == null) return;
+        string? keep = SelectedAnimation?.Id;
+        Animations.Clear();
+        foreach (AnimationInfo a in await _api.AnimationsAsync()) Animations.Add(a);
+        SelectedAnimation = Animations.FirstOrDefault(a => a.Id == keep && a.Ready)
+                            ?? Animations.FirstOrDefault(a => a.Ready);
     }
 
     public void ShowBusy(string message) => SetStatus(StatusKind.Busy, message);
@@ -387,6 +398,7 @@ public sealed class MainViewModel : ObservableObject
         CharacterReply r = await _api.SetAngleAsync(_angle == "34" ? "side" : "34");
         ApplyAngle(r.Character!);
         if (r.State != null) ApplyState(r.State);
+        await ReloadAnimationsAsync();
         SetStatus(StatusKind.Ok, (_angle == "34" ? "Các hoạt ảnh sẽ dùng bộ tư thế nhìn ba phần tư."
                                                  : "Các hoạt ảnh sẽ dùng bộ tư thế nhìn ngang.")
                                  + (hadFrames ? " Các khung đã tạo theo góc cũ đã được bỏ, hãy bấm Tạo lại." : ""));
@@ -433,6 +445,7 @@ public sealed class MainViewModel : ObservableObject
             _ => $"Hướng: {dir} (giả định — bấm “Đổi hướng” nếu sai).",
         };
         ApplyAngle(c);
+        await ReloadAnimationsAsync();
         Skeleton = c.Skeleton;
         if (r.State != null) ApplyState(r.State);
         CommandManager.InvalidateRequerySuggested();

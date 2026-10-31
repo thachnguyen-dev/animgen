@@ -238,7 +238,7 @@
                                     <DataTemplate>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{Binding NameVi}"/>
-                                            <TextBlock Text=" (chưa có)" Style="{StaticResource TextMuted}">
+                                            <TextBlock Text="{Binding MissingNote}" Style="{StaticResource TextMuted}">
                                                 <TextBlock.Visibility>
                                                     <Binding Path="Ready">
                                                         <Binding.Converter>

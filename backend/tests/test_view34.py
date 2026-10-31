@@ -7,13 +7,14 @@ from types import SimpleNamespace
 import pytest
 
 from animgen import authoring, authoring34, config
+from animgen.errors import AppError
 from animgen.rig import Rig
 from animgen.session import guess_angle
 from animgen.skeleton import (EDGES, LEYE, LSHO, RSHO, Skeleton, bone_length, fit_frame, measure)
 from animgen.tasks import TaskRunner
-from animgen.templates import ANIMATIONS, load_template
+from animgen.templates import ANIMATIONS, available, load_template, template_dir
 
-READY = [a[0] for a in ANIMATIONS if a[4]]
+READY = [a[0] for a in ANIMATIONS if a[4] and a[0] not in authoring34.OMITTED]
 
 
 def run(fn, timeout=120):
@@ -36,7 +37,7 @@ def test_every_animation_has_a_three_quarter_template(tid):
 
 
 def test_stored_three_quarter_templates_match_authoring_source():
-    for tid in authoring.TEMPLATES:
+    for tid in authoring34.ids():
         with open(f"animgen/template_data/view34/{tid}.json", encoding="utf-8") as f:
             assert json.load(f) == json.loads(json.dumps(authoring34.build(tid))), tid
 
@@ -72,25 +73,24 @@ def test_a_slash_winds_the_chest_back_and_swings_it_through():
 
 
 def test_the_far_arm_always_stays_behind_the_body():
-    # Owner, 2026-10-31: even reaching forward (A7 casts with the far hand) it is drawn behind the body; only on
-    # the two-handed grip (A3) is it drawn over the head and body, in every frame.
+    # Owner, 2026-10-31: even reaching forward (A7 casts with the far hand) it is drawn behind the body.
     for tid in READY:
-        fronts = ["arm_far" in fr.front for fr in load_template(tid, angle="34").frames]
-        assert all(fronts) if tid == "a3" else not any(fronts), tid
+        assert not any("arm_far" in fr.front for fr in load_template(tid, angle="34").frames), tid
 
 
-def test_the_two_handed_near_elbow_leads_and_the_smash_runs_across():
-    from animgen.authoring34 import SMASH_FRAMES
-    from animgen.skeleton import NECK, RELB, RSHO, RWRI
-    for i, fr in enumerate(load_template("a3", angle="34").frames):
-        p = fr.skeleton.points
-        assert "arm" not in fr.back
-        if i in SMASH_FRAMES:
-            assert p[RELB][0] > p[RSHO][0]                          # reaching out: the elbow still not back
-        else:
-            assert p[RELB][0] > max(p[RSHO][0], p[RWRI][0])         # forward of both the shoulder and the hand
-    impact = load_template("a3", angle="34").frames[6].skeleton.points
-    assert impact[RWRI][0] - impact[NECK][0] > 0.10                 # the smash ends out along the picture
+def test_the_two_handed_weapon_has_no_three_quarter_version(session, hero):
+    # Owner, 2026-10-31: A3 removed from the 3/4 set; a 3/4 character cannot pick it, a side one still can.
+    assert not (template_dir("34") / "a3.json").exists()
+    ready = lambda angle: {a["id"]: a["ready"] for a in available(angle)}
+    assert ready("side")["a3"] and not ready("34")["a3"]
+    assert {a["id"]: a["missing"] for a in available("34")}["a3"] == "angle"
+    assert ready("34")["a4"]
+    session.set_character(str(hero))
+    session.set_angle("34")
+    session.require_confirmed_skeleton = False
+    with pytest.raises(AppError) as e:
+        session.prepare("a3")
+    assert e.value.code == "animation_not_for_angle"
 
 
 def test_the_spear_wind_up_pulls_the_near_arm_back():
@@ -162,7 +162,7 @@ def test_flipping_the_facing_keeps_the_owners_angle(session, hero):
 
 def test_two_hands_on_one_weapon_stay_together():
     from animgen.skeleton import LWRI, RWRI
-    for tid in ("a3", "a4"):
+    for tid in ("a4",):
         for fr in load_template(tid, angle="34").frames:
             r, l = fr.skeleton.points[RWRI], fr.skeleton.points[LWRI]
             assert math.dist(r, l) < 0.2, tid                       # on one handle (the side poses' gap)

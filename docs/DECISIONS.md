@@ -360,7 +360,7 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   into the torso on the map, the kind of mistake the map stage exists for.
 - The pose editor (owner's option 1) stays the planned fallback for special characters.
 
-## Three-quarter view pose set (owner, 2026-10-31) — owner direction Confirmed, poses Proposed
+## Three-quarter view pose set (owner, 2026-10-31) — Confirmed (owner, 2026-10-31), without A3
 
 - Why: the side-view poses on a 3/4 character lose the body's width and hide the far arm (tested on a 3/4 shape
   character); the owner chose a separate pose set over adapting the side one, and asked for it to follow common
@@ -398,6 +398,11 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   cannot have its elbow past the hand, and forcing it pulled the smash back into the body. The spear (A4) is back
   to the second-round arm; only in the wind-up frames (1-3, 7-8) the right forearm and hand come back 0.08 with
   the elbow behind the shoulder (the third round had pulled the whole side pose back, which bent the left arm).
+- Closed (owner, 2026-10-31): the current poses are confirmed, no further changes. A3 (two-handed weapon) still
+  did not satisfy and is removed from the 3/4 set rather than fixed: authoring34.OMITTED, no view34/a3.json. The
+  animation list follows the character's angle (GET /animations), so a 3/4 character sees A3 as "không có ở góc
+  ba phần tư" and cannot generate it (error animation_not_for_angle); side characters keep A3. Special poses are
+  made with the pose editor instead (next section).
 - Test character: dev/tools/shape_character.py --view 34 (drawn from the same 3D body) renders all animations to
   D:/Game/ainm/pose_test_34.
 

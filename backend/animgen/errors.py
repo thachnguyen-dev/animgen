@@ -24,6 +24,7 @@ MESSAGES_VI: dict[str, str] = {
     "skeleton_incomplete": "Khung xương cần ít nhất cổ, hông và cổ chân.",
     "unknown_animation": "Không có hoạt ảnh này.",
     "animation_not_ready": "Hoạt ảnh này chưa có trong phiên bản hiện tại.",
+    "animation_not_for_angle": "Hoạt ảnh này không có cho nhân vật nhìn ba phần tư. Hãy chọn hoạt ảnh khác.",
     "busy": "Đang có một việc khác chạy. Hãy chờ xong hoặc huỷ.",
     "gpu_out_of_memory": "Không đủ bộ nhớ GPU cho khung hình này.",
     "inference_failed": "Tạo khung hình bị lỗi: {detail}",

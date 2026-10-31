@@ -34,8 +34,12 @@ public sealed class AnimationInfo
     public string Grip { get; set; } = "never";         // never | optional | always: hands closed for a weapon
     public List<string> WeaponKinds { get; set; } = new();
     public string? Status { get; set; }
+    public string? Missing { get; set; }               // null | version | angle: why it cannot be made
 
-    public override string ToString() => Ready ? NameVi : $"{NameVi} (chưa có)";   // the name screen readers and UI Automation see
+    /// <summary>Shown after the name when it cannot be made.</summary>
+    public string MissingNote => Missing == "angle" ? " (không có ở góc nhìn ba phần tư)" : " (chưa có)";
+
+    public override string ToString() => Ready ? NameVi : NameVi + MissingNote;   // the name screen readers and UI Automation see
 }
 
 public sealed class Figure

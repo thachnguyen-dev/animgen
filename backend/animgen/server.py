@@ -91,7 +91,7 @@ class App:
             if parts == ["health"]:
                 return 200, {"ok": True, "engine": s.engine.name, "demo": s.engine.is_demo, "version": __version__}
             if parts == ["animations"]:
-                return 200, available()
+                return 200, available(s.character.angle if s.character else "side")
             if parts == ["state"]:
                 return 200, s.state()
             if len(parts) == 2 and parts[0] == "tasks":
