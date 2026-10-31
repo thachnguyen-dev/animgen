@@ -252,6 +252,15 @@
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
                             <TextBlock Text="{Binding AnimationNote}" Style="{StaticResource TextMuted}" Margin="{StaticResource SpaceGap}"/>
+                            <!-- The owner's own poses (pose editor, owner 2026-10-31) -->
+                            <WrapPanel Margin="{StaticResource SpaceGap}">
+                                <Button Content="Tạo tư thế mới…" Click="NewPose_Click" Padding="8,4" Margin="{StaticResource SpaceRight}"
+                                        IsEnabled="{Binding Ready}"/>
+                                <Button Content="Sửa tư thế…" Click="EditPose_Click" Padding="8,4" Margin="{StaticResource SpaceRight}"
+                                        IsEnabled="{Binding IsCustomAnimation}"/>
+                                <Button Content="Xoá tư thế" Click="DeletePose_Click" Padding="8,4"
+                                        IsEnabled="{Binding IsCustomAnimation}"/>
+                            </WrapPanel>
 
                             <CheckBox Content="Tay nắm (để gắn vũ khí trong game)" IsChecked="{Binding Grip}"
                                       Visibility="{Binding ShowGrip, Converter={StaticResource BoolToVis}}"/>

@@ -234,6 +234,7 @@ public sealed class MainViewModel : ObservableObject
         {
             if (Set(ref _selectedAnimation, value))
             {
+                Raise(nameof(IsCustomAnimation));
                 Raise(nameof(ShowGrip));
                 Raise(nameof(CanGenerate));
                 Raise(nameof(AnimationNote));
@@ -361,6 +362,41 @@ public sealed class MainViewModel : ObservableObject
     }
 
     public void ShowBusy(string message) => SetStatus(StatusKind.Busy, message);
+    public void ShowReady() => SetStatus(StatusKind.Info, "Sẵn sàng.");
+    public void ShowError(string message) => SetStatus(StatusKind.Error, message);
+
+    // ---- The owner's own poses (pose editor, owner 2026-10-31) ----
+
+    /// <summary>The view a new pose is made for: the character's, or side view before one is chosen.</summary>
+    public string Angle => _characterPath != null ? _angle : "side";
+
+    public bool IsCustomAnimation => SelectedAnimation is { Custom: true };
+
+    public async Task PoseSavedAsync(string id)
+    {
+        await ReloadAnimationsAsync();
+        AnimationInfo? saved = Animations.FirstOrDefault(a => a.Id == id && a.Ready);
+        if (saved != null) SelectedAnimation = saved;
+        SetStatus(StatusKind.Ok, saved != null
+            ? $"Đã lưu tư thế “{saved.NameVi}” và chọn nó để tạo."
+            : "Đã lưu tư thế. Nó có trong danh sách khi nhân vật có cùng góc nhìn.");
+    }
+
+    public async Task DeletePoseAsync(string id)
+    {
+        if (_api == null) return;
+        try
+        {
+            await _api.DeletePoseAsync(id);
+            SelectedAnimation = null;
+            await ReloadAnimationsAsync();
+            SetStatus(StatusKind.Ok, "Đã xoá tư thế.");
+        }
+        catch (BackendException ex)
+        {
+            SetStatus(StatusKind.Error, ex.Message);
+        }
+    }
 
     public void ShowStartupError(string message)
     {

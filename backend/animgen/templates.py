@@ -46,6 +46,33 @@ BACK_MESHES = ("arm",)
 def template_dir(angle: str = "side") -> Path:
     return TEMPLATE_DIR / "view34" if angle == "34" else TEMPLATE_DIR
 
+
+# The owner's own poses, made in the pose editor (poses.py): <data>/poses/u_*.json, each for one view.
+CUSTOM_PREFIX = "u_"
+_custom: dict[str, Path | None] = {"dir": None}
+
+
+def custom_dir(data_dir: Path) -> Path:
+    """Where the owner's poses are kept, and from now on looked up."""
+    _custom["dir"] = Path(data_dir) / "poses"
+    return _custom["dir"]
+
+
+def _custom_templates(angle: str) -> list[dict]:
+    folder = _custom["dir"]
+    out = []
+    if folder is None or not folder.is_dir():
+        return out
+    for path in sorted(folder.glob(f"{CUSTOM_PREFIX}*.json")):
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("angle", "side") == angle:
+                out.append(data)
+        except (OSError, ValueError):
+            continue
+    return out
+
 WEAPON_KINDS = ("one_handed", "two_handed", "polearm", "bow", "staff")
 
 # Confirmed lists (§5.1, §5.2) with the Proposed cuts C1 and C2: which ones are in this version.
@@ -187,6 +214,14 @@ def parse_template(data: dict) -> MotionTemplate:
 
 
 def load_template(tid: str, directory: Path | None = None, angle: str = "side") -> MotionTemplate:
+    if directory is None and tid.startswith(CUSTOM_PREFIX):
+        if _custom["dir"] is None:
+            raise FileNotFoundError(tid)
+        with open(_custom["dir"] / f"{tid}.json", encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("angle", "side") != angle:           # made for the other view
+            raise FileNotFoundError(tid)
+        return parse_template(data)
     path = (directory or template_dir(angle)) / f"{tid}.json"
     with open(path, encoding="utf-8") as f:
         return parse_template(json.load(f))
@@ -208,4 +243,8 @@ def available(angle: str = "side") -> list[dict]:
             t = load_template(tid, directory, angle)
             entry.update(grip=t.grip, weapon_kinds=t.weapon_kinds, status=t.status)
         out.append(entry)
+    for d in _custom_templates(angle):                  # the owner's own poses, after the built-in ones
+        out.append({"id": d.get("id"), "animation": "custom", "variant": d.get("id"),
+                    "name_vi": d.get("name_vi", ""), "ready": True, "grip": d.get("grip", "never"),
+                    "weapon_kinds": d.get("weapon_kinds", []), "status": "Owner", "missing": None, "custom": True})
     return out

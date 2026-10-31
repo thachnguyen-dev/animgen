@@ -1,0 +1,140 @@
+<Window x:Class="AnimGen.Views.PoseEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Tư thế của bạn"
+        Width="1180" Height="860" MinWidth="980" MinHeight="680"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{StaticResource BrushWindow}" Foreground="{StaticResource BrushText}"
+        FontFamily="{StaticResource FontUi}" FontSize="{StaticResource FontSizeBody}"
+        Closing="Window_Closing">
+    <Window.Resources>
+        <!-- One cell of the 8-frame strip, as in the main window -->
+        <DataTemplate x:Key="PoseCell">
+            <Button Click="Cell_Click" Tag="{Binding}" Padding="4" Margin="{StaticResource SpaceRight}"
+                    AutomationProperties.Name="{Binding Label}">
+                <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource ButtonBase}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                <Setter Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                                <Setter Property="BorderThickness" Value="3"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Button.Style>
+                <StackPanel Width="{StaticResource SizeStripCell}">
+                    <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeStripCell}">
+                        <Image Source="{Binding Image}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    </Border>
+                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="{StaticResource PaddingPanel}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="{StaticResource WidthLeftPanel}"/>
+            <ColumnDefinition Width="16"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- The pose and the frame being posed -->
+        <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <Border Style="{StaticResource Panel}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource TextTitle}" Text="Tư thế"/>
+                        <TextBlock Style="{StaticResource TextMuted}" Margin="{StaticResource SpaceGap}"
+                                   Text="Tạo dáng cho nhân vật mẫu trong cả 8 khung rồi lưu. Tư thế đã lưu có trong danh sách hoạt ảnh của các nhân vật cùng góc nhìn."/>
+                        <TextBlock Text="Tên tư thế" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBox x:Name="NameBox" Margin="{StaticResource SpaceGap}" MaxLength="40"
+                                 TextChanged="NameBox_TextChanged" AutomationProperties.Name="Tên tư thế"/>
+                        <StackPanel x:Name="StartPanel">
+                            <TextBlock Text="Góc nhìn" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                            <ComboBox x:Name="AngleBox" Margin="{StaticResource SpaceGap}" AutomationProperties.Name="Góc nhìn">
+                                <ComboBoxItem Content="Nhìn ngang" Tag="side"/>
+                                <ComboBoxItem Content="Nhìn ba phần tư" Tag="34"/>
+                            </ComboBox>
+                            <TextBlock Text="Bắt đầu từ" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                            <ComboBox x:Name="BaseBox" Margin="{StaticResource SpaceGap}" DisplayMemberPath="Name"
+                                      AutomationProperties.Name="Bắt đầu từ"/>
+                            <Button Content="Bắt đầu lại" Click="Restart_Click" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                        <TextBlock x:Name="AngleText" Style="{StaticResource TextMuted}" Margin="{StaticResource SpaceGap}"
+                                   Visibility="Collapsed"/>
+                        <TextBlock Text="Tay nắm vũ khí" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="GripBox" Margin="{StaticResource SpaceGap}" SelectionChanged="GripBox_SelectionChanged"
+                                  AutomationProperties.Name="Tay nắm vũ khí">
+                            <ComboBoxItem Content="Không (tay không)" Tag="never"/>
+                            <ComboBoxItem Content="Tuỳ chọn khi tạo" Tag="optional"/>
+                            <ComboBoxItem Content="Luôn nắm" Tag="always"/>
+                        </ComboBox>
+                        <Button x:Name="SaveButton" Style="{StaticResource ButtonPrimary}" Content="Lưu tư thế" Click="Save_Click"
+                                HorizontalAlignment="Stretch"/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource Panel}">
+                    <StackPanel>
+                        <TextBlock x:Name="FrameTitle" Style="{StaticResource TextTitle}" Text="Khung 1"/>
+                        <CheckBox x:Name="GroundBox" Content="Chân chạm đất" Click="FrameOption_Click"/>
+                        <CheckBox x:Name="OpenNearBox" Content="Mở bàn tay gần" Click="FrameOption_Click"/>
+                        <CheckBox x:Name="OpenFarBox" Content="Mở bàn tay xa" Click="FrameOption_Click"/>
+                        <StackPanel x:Name="LayerPanel">
+                            <CheckBox x:Name="FarArmFrontBox" Content="Tay xa vẽ trước thân" Click="FrameOption_Click"/>
+                            <CheckBox x:Name="FarLegFrontBox" Content="Chân xa vẽ trước chân gần" Click="FrameOption_Click"/>
+                            <CheckBox x:Name="NearArmBackBox" Content="Tay gần vẽ sau thân" Click="FrameOption_Click"/>
+                        </StackPanel>
+                        <Button Content="Chép khung trước" Click="CopyPrevious_Click" HorizontalAlignment="Left"/>
+                        <Button Content="Đặt lại khung này" Click="ResetFrame_Click" HorizontalAlignment="Left"/>
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="StatusBorder" Style="{StaticResource Panel}" Visibility="Collapsed">
+                    <DockPanel>
+                        <TextBlock x:Name="StatusGlyph" Style="{StaticResource TextIcon}" Text="{StaticResource GlyphInfo}"/>
+                        <TextBlock x:Name="StatusText" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                    </DockPanel>
+                </Border>
+                <Button Content="Đóng" Click="Close_Click" HorizontalAlignment="Right"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- The sample character in the frame being posed, and the 8 frames -->
+        <Border Grid.Column="2" Style="{StaticResource Panel}" Margin="0">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource TextTitle}" Text="Kéo khớp để tạo dáng"/>
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource TextMuted}" Margin="{StaticResource SpaceGap}"
+                           Text="Kéo một khớp để xoay phần cơ thể từ khớp đó, kéo hông để dời cả người. Giữ Shift khi kéo để dời riêng một khớp (chi ngắn lại như hướng về phía người xem). Đường mờ là khung trước."/>
+                <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                    <Button x:Name="PlayButton" DockPanel.Dock="Left" Click="Play_Click" Padding="8,4" Margin="{StaticResource SpaceRight}"
+                            VerticalAlignment="Center" AutomationProperties.Name="Phát hoặc dừng">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="PlayGlyph" Style="{StaticResource TextIcon}" Text="{StaticResource GlyphPlay}"/>
+                            <TextBlock x:Name="PlayText" Text="Phát"/>
+                        </StackPanel>
+                    </Button>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <ItemsControl x:Name="Strip" ItemTemplate="{StaticResource PoseCell}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+                <Border Background="{StaticResource BrushChecker}" BorderBrush="{StaticResource BrushBorder}" BorderThickness="1">
+                    <Grid x:Name="DragArea" Background="Transparent" HorizontalAlignment="Center" VerticalAlignment="Center" Cursor="Cross"
+                          MouseLeftButtonDown="DragArea_MouseLeftButtonDown" MouseMove="DragArea_MouseMove"
+                          MouseLeftButtonUp="DragArea_MouseLeftButtonUp" LostMouseCapture="DragArea_LostMouseCapture">
+                        <Image x:Name="FigureImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                               SizeChanged="FigureImage_SizeChanged" AutomationProperties.Name="Nhân vật mẫu"/>
+                        <Canvas x:Name="Markers" IsHitTestVisible="False"/>
+                    </Grid>
+                </Border>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

@@ -72,6 +72,16 @@ public sealed class BackendClient : IDisposable
 
     /// <param name="grip">Hands closed around a weapon attached later; null where the animation decides.</param>
     /// <param name="finish">The AI finishing pass (slower).</param>
+    // The pose editor: a sample character posed in 8 frames, saved as an animation (owner, 2026-10-31).
+    public Task<PoseEditReply> StartPoseAsync(string angle, string? from) =>
+        PostAsync<PoseEditReply>("poses/start", new { angle, from });
+    public Task<PoseEditReply> OpenPoseAsync(string id) => PostAsync<PoseEditReply>("poses/open", new { id });
+    public Task<PosePreview> PreviewPoseAsync(string angle, PoseFrame frame) =>
+        PostAsync<PosePreview>("poses/preview", new { angle, frame });
+    public Task<PoseSaved> SavePoseAsync(string? id, string name, string angle, string grip, IEnumerable<PoseFrame> frames) =>
+        PostAsync<PoseSaved>("poses/save", new { id, name, angle, grip, frames = frames.ToArray() });
+    public Task DeletePoseAsync(string id) => PostAsync<JsonElement>("poses/delete", new { id });
+
     public Task<TaskReply> GenerateAsync(string animation, bool? grip, bool finish) =>
         PostAsync<TaskReply>("generate", new { animation, grip, finish });
 

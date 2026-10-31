@@ -406,6 +406,32 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
 - Test character: dev/tools/shape_character.py --view 34 (drawn from the same 3D body) renders all animations to
   D:/Game/ainm/pose_test_34.
 
+## Pose editor (owner, 2026-10-31) — owner request Confirmed, plan approved by the owner ("yes approve all")
+
+The owner makes new animations themselves: the app shows a sample character in 8 frames, the owner moves its
+joints and body parts in every frame and saves the pose. Built as planned and approved:
+- Sample character: the shape figure (animgen/sample.py, moved there from dev/tools/shape_character.py, which now
+  imports it), opened in a session of its own per view under <data>/pose_editor/<side|34>, with its rig written
+  from the shapes, so every frame is drawn exactly as generation draws it (rig render, no AI, under a second).
+- Editing (PoseEditorWindow, same layout as the skeleton dialog): dragging a joint turns the body part from it
+  around its parent joint (bones keep their length); dragging a hip moves the whole body; Shift moves one joint
+  alone. After each drag the backend fits the frame to the sample (lengths kept, at most 1.25x; a shorter bone
+  stays shorter, as pointing at the viewer; feet on the ground in grounded frames) and draws it. Per frame: feet
+  on the ground / in the air, near/far hand open, and in the 3/4 view the layer order (far arm or far leg in front,
+  near arm behind). "Chép khung trước", "Đặt lại khung này", the previous frame shown faint, 8 fps playback.
+- Start: a view (side or 3/4, default the loaded character's) and an existing animation or standing; "Bắt đầu
+  lại". Editing a saved pose keeps its view.
+- Saving: a name (up to 40 characters) and the weapon grip (never / optional / always); the weapon direction for
+  the hand-anchor file follows the near forearm. Saved as a motion template, checked like the built-in ones, in
+  <data>/poses/u_<8 hex>.json (outside the app, so updates keep it). Its rest pose is the sample's bind pose with
+  every bone at full length, so a frame fitted to the sample comes back unchanged (tested both views); another
+  character takes the bone directions with its own lengths.
+- In the app: step 3 has "Tạo tư thế mới…", "Sửa tư thế…" and "Xoá tư thế" (the last two for the owner's own
+  poses); the list shows a saved pose only for characters seen from its view, after the built-in ones, and
+  generates it like any other. Server: GET /poses, POST /poses/start|open|preview|save|delete.
+- Not done: no keyboard way to move joints (the skeleton dialog's joint list was not copied); no undo beyond
+  "Đặt lại khung này"; no per-frame weapon direction handle.
+
 ## Not done on purpose
 
 - No free-form prompts, no batch generation, no automatic quality scoring, no Unity configuration files, no

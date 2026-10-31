@@ -35,6 +35,7 @@ public sealed class AnimationInfo
     public List<string> WeaponKinds { get; set; } = new();
     public string? Status { get; set; }
     public string? Missing { get; set; }               // null | version | angle: why it cannot be made
+    public bool Custom { get; set; }                    // the owner's own pose, made in the pose editor
 
     /// <summary>Shown after the name when it cannot be made.</summary>
     public string MissingNote => Missing == "angle" ? " (không có ở góc nhìn ba phần tư)" : " (chưa có)";
@@ -66,6 +67,49 @@ public sealed class CharacterInfo
 
 /// <summary>The character's skeleton on <see cref="Image"/> (the character's own facing), 18 OpenPose points in
 /// image pixels; a missing joint is null.</summary>
+// ---- The pose editor (owner, 2026-10-31) ----
+
+/// <summary>The sample character the owner poses: its canvas and its own (bind) joints.</summary>
+public sealed class PoseSample
+{
+    public string Angle { get; set; } = "side";
+    public int Width { get; set; }
+    public int Height { get; set; }
+    public List<double[]?> Rest { get; set; } = new();
+    public double Ground { get; set; }
+}
+
+/// <summary>One of the 8 frames being posed, in the sample's canvas pixels.</summary>
+public sealed class PoseFrame
+{
+    public List<double[]?> Points { get; set; } = new();
+    public string Contact { get; set; } = "ground";        // ground | air
+    public List<string> Open { get; set; } = new();         // "r" near hand, "l" far hand
+    public List<string> Front { get; set; } = new();        // arm_far, leg_far (3/4 view)
+    public List<string> Back { get; set; } = new();         // arm (3/4 view)
+}
+
+public sealed class PoseEditReply
+{
+    public PoseSample Sample { get; set; } = new();
+    public List<PoseFrame> Frames { get; set; } = new();
+    public string? Id { get; set; }
+    public string? Name { get; set; }
+    public string? Grip { get; set; }
+}
+
+public sealed class PosePreview
+{
+    public string Image { get; set; } = "";
+    public List<double[]?> Points { get; set; } = new();
+}
+
+public sealed class PoseSaved
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+}
+
 public sealed class SkeletonInfo
 {
     public string? Image { get; set; }

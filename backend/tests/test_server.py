@@ -174,3 +174,20 @@ def test_input_error_over_http(server, tmp_path):
     p = synth.checkerboard_character(tmp_path / "cb.png")
     st, err = call(server, "POST", "/character", {"path": str(p)})
     assert st == 400 and err["error"]["code"] == "input_checkerboard"
+
+
+def test_pose_editor_routes(server):
+    st, r = call(server, "POST", "/poses/start", {"angle": "side", "from": "walk"})
+    assert st == 200 and len(r["frames"]) == 8 and r["sample"]["width"] > 0
+    st, p = call(server, "POST", "/poses/preview", {"angle": "side", "frame": r["frames"][2]})
+    assert st == 200 and Path(p["image"]).exists()
+    st, saved = call(server, "POST", "/poses/save", {"angle": "side", "name": "Đi nhón", "frames": r["frames"]})
+    assert st == 200
+    st, lst = call(server, "GET", "/poses")
+    assert [x["id"] for x in lst] == [saved["id"]]
+    st, anims = call(server, "GET", "/animations")
+    assert saved["id"] in {a["id"] for a in anims if a["ready"]}
+    st, _ = call(server, "POST", "/poses/delete", {"id": saved["id"]})
+    assert st == 200 and call(server, "GET", "/poses")[1] == []
+    st, err = call(server, "POST", "/poses/save", {"angle": "side", "name": "", "frames": r["frames"]})
+    assert st == 400 and err["error"]["code"] == "pose_name_missing"

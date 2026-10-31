@@ -50,6 +50,7 @@ from . import __version__, config
 from .errors import AppError
 from .session import Session
 from .tasks import TaskRunner
+from .poses import PoseEditor
 from .templates import available
 
 
@@ -79,6 +80,7 @@ def plain(value: Any) -> Any:
 class App:
     def __init__(self, session: Session, token: str) -> None:
         self.session = session
+        self.poses = PoseEditor(session.data_dir)     # the owner's own poses (pose editor)
         self.token = token
         self.runner = TaskRunner()
         self.shutdown_requested = threading.Event()
@@ -90,6 +92,8 @@ class App:
         if method == "GET":
             if parts == ["health"]:
                 return 200, {"ok": True, "engine": s.engine.name, "demo": s.engine.is_demo, "version": __version__}
+            if parts == ["poses"]:
+                return 200, self.poses.list()
             if parts == ["animations"]:
                 return 200, available(s.character.angle if s.character else "side")
             if parts == ["state"]:
@@ -189,6 +193,17 @@ class App:
                 if "auto_retries" in body:
                     s.auto_retries = max(0, min(int(body["auto_retries"]), config.MAX_AUTO_RETRIES))
                 return 200, s.state()
+            # The pose editor (owner, 2026-10-31): a sample character posed in 8 frames, saved as an animation.
+            if parts == ["poses", "start"]:
+                return 200, self.poses.start(_req(body, "angle", str), body.get("from"))
+            if parts == ["poses", "open"]:
+                return 200, self.poses.open(_req(body, "id", str))
+            if parts == ["poses", "preview"]:
+                return 200, self.poses.preview(_req(body, "angle", str), _req(body, "frame", dict))
+            if parts == ["poses", "save"]:
+                return 200, self.poses.save(body)
+            if parts == ["poses", "delete"]:
+                return 200, self.poses.delete(_req(body, "id", str))
             if parts == ["shutdown"]:
                 self.shutdown_requested.set()
                 return 200, {"ok": True}
@@ -324,6 +339,7 @@ def serve(engine_name: str, data_dir: Path, models_dir: Path, token: str, port: 
         pass
     finally:
         httpd.shutdown()
+        app.poses.close()
         session.close()
 
 

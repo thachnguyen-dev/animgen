@@ -44,7 +44,7 @@ from .inputs import CharacterInput, check_character
 from .skeleton import (LANK, LELB, LEYE, LHIP, LKNE, LSHO, LWRI, NECK, RANK, RELB, REYE, RHIP, RKNE, RSHO, RWRI,
                        Proportions, Skeleton, fit_frame, hand_point, measure)
 from .tasks import Task
-from .templates import ANGLES, ANIMATIONS, MotionTemplate, load_template
+from .templates import ANGLES, ANIMATIONS, CUSTOM_PREFIX, MotionTemplate, load_template
 from . import export as export_mod
 
 
@@ -749,9 +749,10 @@ class Session:
         if self.require_confirmed_skeleton and not self.character.skeleton_confirmed:
             raise AppError("skeleton_unconfirmed")
         known = {a[0]: a for a in ANIMATIONS}
-        if animation_id not in known:
+        custom = animation_id.startswith(CUSTOM_PREFIX)        # the owner's own pose (pose editor)
+        if animation_id not in known and not custom:
             raise AppError("unknown_animation")
-        if not known[animation_id][4]:
+        if not custom and not known[animation_id][4]:
             raise AppError("animation_not_ready")
         try:
             template = load_template(animation_id, angle=self.character.angle)
