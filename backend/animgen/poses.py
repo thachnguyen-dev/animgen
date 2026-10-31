@@ -20,6 +20,7 @@ import uuid
 from pathlib import Path
 
 from . import sample
+from . import shape as shape_mod
 from .errors import AppError
 from .skeleton import EDGES, RELB, RWRI, Skeleton, fit_frame, measure
 from .templates import (ANGLES, BACK_MESHES, FRONT_MESHES, WEAPON_KINDS, TemplateError, custom_dir, load_template,
@@ -116,7 +117,8 @@ class PoseEditor:
         for tf in tpl.frames:
             sk = self._fit(s, tf.skeleton, tpl.rest, tf.grounded)
             out.append({"points": sk.to_json(), "contact": "ground" if tf.grounded else "air",
-                        "open": list(tf.open_hands), "front": list(tf.front), "back": list(tf.back)})
+                        "open": list(tf.open_hands), "front": list(tf.front), "back": list(tf.back),
+                        "shape": tf.shape.to_json() if tf.shape is not None else {}})
         return out
 
     def start(self, angle: str, base: str | None) -> dict:
@@ -135,9 +137,10 @@ class PoseEditor:
         return {"sample": self.info(angle), "id": tid, "name": data.get("name_vi", ""), "grip": data.get("grip"),
                 "frames": self._frames_from(s, tid, angle)}
 
-    def _frame(self, s, fr: dict) -> tuple[Skeleton, bool, tuple, tuple, tuple]:
+    def _frame(self, s, fr: dict) -> tuple[Skeleton, bool, tuple, tuple, tuple, shape_mod.Shape | None]:
         """One frame from the editor, checked, and fitted to the sample: the bones keep their lengths (or are drawn
-        shorter, pointing toward the viewer) and grounded feet stand on the ground."""
+        shorter, pointing toward the viewer) and grounded feet stand on the ground. The frame's shape (squash, part
+        sizes, reach, bends) is not in the joints: the editor moves the joints of the pose itself."""
         if not isinstance(fr, dict):
             raise AppError("bad_request", detail="frame")
         pts = fr.get("points")
@@ -156,18 +159,24 @@ class PoseEditor:
         opened = tuple(h for h in ("r", "l") if h in (fr.get("open") or []))
         front = tuple(m for m in FRONT_MESHES if m in (fr.get("front") or []))
         back = tuple(m for m in BACK_MESHES if m in (fr.get("back") or []))
+        try:
+            shape = shape_mod.parse(fr.get("shape"))
+        except ValueError as exc:
+            raise AppError("bad_request", detail=f"shape: {exc}") from exc
         rest = self._rest(s)
         try:
             fitted = self._fit(s, Skeleton.from_json(self._to_template(s, clean)), rest, grounded)
         except (ValueError, AssertionError) as exc:
             raise AppError("pose_frame_bad") from exc
-        return fitted, grounded, opened, front, back
+        return fitted, grounded, opened, front, back, shape
 
     def preview(self, angle: str, fr: dict) -> dict:
-        """The sample drawn in one frame's pose, and the joints where they ended up."""
+        """The sample drawn in one frame's pose, and the joints where they ended up (the pose's own joints, before
+        the frame's reach lengthens an arm)."""
         s = self._sample(angle)
-        sk, _grounded, opened, front, back = self._frame(s, fr)
-        image, _keep = s.rig.rig.render_keep(sk, {}, opened, s.character.placement.anchor[1], front, back)
+        sk, _grounded, opened, front, back, shape = self._frame(s, fr)
+        image, _keep = s.rig.rig.render_keep(shape_mod.apply_reach(sk, shape), {}, opened,
+                                             s.character.placement.anchor[1], front, back, shape)
         path = self.work / angle / f"preview_{uuid.uuid4().hex[:8]}.png"
         image.save(path)
         with self._lock:                  # only the latest preview of each view is kept
@@ -196,7 +205,7 @@ class PoseEditor:
         tid = _tid(body["id"]) if body.get("id") else f"u_{uuid.uuid4().hex[:8]}"
         out_frames = []
         for fr in frames:
-            sk, grounded, opened, front, back = self._frame(s, fr)
+            sk, grounded, opened, front, back, shape = self._frame(s, fr)
             entry = {"points": self._to_template(s, sk.to_json()), "contact": "ground" if grounded else "air"}
             if grip != "never":
                 # The weapon points along the near forearm (0 = right, 90 = down), held in front.
@@ -209,6 +218,8 @@ class PoseEditor:
                 entry["front"] = list(front)
             if back:
                 entry["back"] = list(back)
+            if shape is not None:
+                entry["shape"] = shape.to_json()
             out_frames.append(entry)
         data = {"id": tid, "animation": "custom", "variant": tid, "name_vi": name, "status": "Owner",
                 "angle": angle, "grip": grip, "weapon_kinds": list(WEAPON_KINDS) if grip != "never" else [],

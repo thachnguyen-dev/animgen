@@ -15,7 +15,8 @@ File format (``template_data/<id>.json``)::
          "weapon2": {...},                         # optional, dual wielding: the other hand's weapon, same format
          "open": ["l"],                            # optional: hands drawn as an open palm, others are fists
          "front": ["arm_far", "leg_far"],          # optional (3/4 view): far limbs drawn in front of the body / near leg
-         "back": ["arm"]}                          # optional (3/4 view): the near arm drawn behind the body
+         "back": ["arm"],                          # optional (3/4 view): the near arm drawn behind the body
+         "shape": {"squash": 0.08, ...}}           # optional: squash/stretch, part sizes, reach, bends (shape.py)
       ]
     }
 
@@ -35,6 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import config
+from . import shape as shape_mod
 from .skeleton import N, Skeleton
 
 TEMPLATE_DIR = Path(__file__).parent / "template_data"
@@ -121,6 +123,7 @@ class TemplateFrame:
     weapon2: WeaponPose | None = None   # dual wielding: the other hand's weapon
     front: tuple[str, ...] = ()         # meshes drawn in front of the body in this frame (3/4 view)
     back: tuple[str, ...] = ()          # meshes drawn behind the body in this frame (3/4 view)
+    shape: shape_mod.Shape | None = None   # squash/stretch, part sizes, reach, bends (owner, 2026-10-31)
 
 
 @dataclass
@@ -204,8 +207,13 @@ def parse_template(data: dict) -> MotionTemplate:
         if not isinstance(front, list) or not set(front) <= set(FRONT_MESHES) \
                 or not isinstance(back, list) or not set(back) <= set(BACK_MESHES):
             raise TemplateError(f"{tid} frame {i + 1}: bad front/back meshes")
+        try:
+            shape = shape_mod.parse(fr.get("shape"))
+        except ValueError as exc:
+            raise TemplateError(f"{tid} frame {i + 1}: {exc}") from exc
         frames.append(TemplateFrame(skeleton=sk, grounded=(contact == "ground"), weapon=wp,
-                                    open_hands=tuple(open_hands), weapon2=wp2, front=tuple(front), back=tuple(back)))
+                                    open_hands=tuple(open_hands), weapon2=wp2, front=tuple(front), back=tuple(back),
+                                    shape=shape))
     return MotionTemplate(
         id=tid, animation=str(data.get("animation", tid)), variant=data.get("variant"),
         name_vi=str(data.get("name_vi", tid)), status=str(data.get("status", "Proposed")),

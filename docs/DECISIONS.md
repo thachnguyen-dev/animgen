@@ -443,6 +443,27 @@ hand next to it), in a separate window. ImageViewerWindow opens from a click on 
 khung" (fits the drawn part of the picture, not the whole square canvas) / 100 % / 200 % / 400 %; from 200 % the
 pixels are drawn sharp (nearest neighbour) so the edges of each part can be judged.
 
+## Squash/stretch, part sizes and bends (owner, 2026-10-31) — owner request Confirmed, default values Proposed
+
+The owner asked whether posing could change sizes or deform slightly, chose all three proposed features, and asked
+for them on every built-in pose in both views ("Applied to all views, all poses").
+- A template frame may carry `"shape"` (animgen/shape.py): `squash` (+ shorter and wider, - taller and thinner, area
+  kept, ±20 %), `size` of the head, either hand or either foot (70–140 %, about the joint it hangs on), `reach` of
+  either arm (80–125 %, along its length), `bend` of the torso, either arm or either leg (±25°, an arc that keeps
+  both ends; + pushes the middle forward, so a + torso is an arched back).
+- Reach changes the fitted skeleton (so the cloth and the hand anchors follow it); sizes and bends move the rig's
+  mesh vertices by the bones they hang on (a cape bends with the torso, long hair grows with the head); squash is one
+  transform of the finished frame about the feet on the ground, or the middle of the figure in the air. "On the
+  ground" is measured against the torso length (a crouched landing first floated, 2026-10-31).
+- Hand anchors in the export follow the grown hand and the squash (the weapon angle too). The AI-only path (no rig)
+  ignores shapes.
+- Built-in values: one table, `authoring.SHAPES`, used by both views; the joints of the confirmed poses are
+  unchanged (all 39 files regenerated identically without the table). Kept small (about 10 % squash, 15 % size,
+  8°): landing/take-off squash and stretch, impact frames with a bigger fist or foot, a longer thrusting arm, torso
+  arches and hunches. Fall loops in the air, so it only stretches.
+- Pose editor: a "Biến dạng khung N" panel with a choice per value (fixed steps; a pose's own value is shown even
+  when it is not a step). Saved poses carry only the values that were changed.
+
 ## Not done on purpose
 
 - No free-form prompts, no batch generation, no automatic quality scoring, no Unity configuration files, no

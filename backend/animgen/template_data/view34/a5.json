@@ -394,6 +394,11 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "bend": {
+     "torso": 2
+    }
+   },
    "weapon": {
     "hand": "l",
     "angle": -90.0,
@@ -474,6 +479,11 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "bend": {
+     "torso": 5
+    }
+   },
    "weapon": {
     "hand": "l",
     "angle": -90.0,
@@ -554,6 +564,11 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "bend": {
+     "torso": 5
+    }
+   },
    "weapon": {
     "hand": "l",
     "angle": -90.0,
@@ -634,6 +649,11 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "bend": {
+     "torso": 3
+    }
+   },
    "weapon": {
     "hand": "l",
     "angle": -90.0,

@@ -240,6 +240,9 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": 0.03
+   },
    "weapon": {
     "hand": "r",
     "angle": -124.7,
@@ -326,6 +329,12 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": -0.03,
+    "bend": {
+     "arm_r": -6
+    }
+   },
    "weapon": {
     "hand": "r",
     "angle": 39.9,
@@ -412,6 +421,9 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": 0.03
+   },
    "weapon": {
     "hand": "r",
     "angle": 82.4,
@@ -498,6 +510,12 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": -0.03,
+    "bend": {
+     "arm_l": -6
+    }
+   },
    "weapon": {
     "hand": "r",
     "angle": -21.5,

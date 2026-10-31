@@ -41,8 +41,9 @@ from .errors import AppError
 from .frames import Placement, clean_alpha, fit_to_canvas, place_reference, validate_image
 from .imaging import pick_background_colour, save_png
 from .inputs import CharacterInput, check_character
+from .shape import Shape, apply_reach, map_angle, shaped_hand, squash_matrix
 from .skeleton import (LANK, LELB, LEYE, LHIP, LKNE, LSHO, LWRI, NECK, RANK, RELB, REYE, RHIP, RKNE, RSHO, RWRI,
-                       Proportions, Skeleton, fit_frame, hand_point, measure)
+                       Proportions, Skeleton, fit_frame, measure)
 from .tasks import Task
 from .templates import ANGLES, ANIMATIONS, CUSTOM_PREFIX, MotionTemplate, load_template
 from . import export as export_mod
@@ -145,6 +146,7 @@ class Slot:
     open_hands: tuple = ()
     front: tuple = ()                # meshes in front of the body in this frame (3/4 view)
     back: tuple = ()
+    shape: Shape | None = None       # squash, part sizes and bends of this frame (its reach is in the skeleton)
 
 
 class Session:
@@ -788,8 +790,9 @@ class Session:
             self.run_seed = seed if seed is not None else random.randint(1, 2**31 - 1)
             self.props = measure(ch.skeleton, template.rest, ch.placement.figure_height, ch.placement.anchor[1])
             for i, tf in enumerate(template.frames):
-                self.slots[i].skeleton = fit_frame(tf.skeleton, template.rest, self.props, ch.placement.anchor,
-                                                   tf.grounded)
+                self.slots[i].skeleton = apply_reach(fit_frame(tf.skeleton, template.rest, self.props,
+                                                               ch.placement.anchor, tf.grounded), tf.shape)
+                self.slots[i].shape = tf.shape
                 self.slots[i].open_hands = tf.open_hands
                 self.slots[i].front, self.slots[i].back = tf.front, tf.back
             if self.rig is not None:
@@ -921,7 +924,7 @@ class Session:
         ch, state = self.character, self.rig
         assert ch is not None and state is not None and slot.skeleton is not None
         image, keep = state.rig.render_keep(slot.skeleton, slot.swing, slot.open_hands, ch.placement.anchor[1],
-                                            slot.front, slot.back)
+                                            slot.front, slot.back, slot.shape)
         if not self.finished:
             return image
         return finish_frame(self.engine, image, keep, ch.placement.image, ch.skeleton, slot.skeleton,
@@ -1014,23 +1017,27 @@ class Session:
         canvas = ch.placement.image.width
         k = height / canvas
         frames = []
-        def anchor(wp, sk) -> dict | None:
-            hand = hand_point(sk, wp.hand) if wp is not None and sk is not None else None
+        def anchor(wp, slot) -> dict | None:
+            # Where the hand is drawn: grown with the hand and squashed with the frame (shape.py), rig frames only.
+            sk, shape = slot.skeleton, slot.shape if self.rig is not None else None
+            hand = shaped_hand(sk, wp.hand, shape, ch.placement.anchor[1]) if wp is not None and sk is not None \
+                else None
             if hand is None:
                 return None
-            x, y, angle = hand[0], hand[1], wp.angle
+            x, y = hand
+            angle = map_angle(squash_matrix(shape, sk, ch.placement.anchor[1]), wp.angle)
             if ch.placement.mirrored:      # back to the character's own facing, as the frames are exported
                 x, angle = canvas - 1 - x, 180.0 - angle
             return {"x": round(x * k, 2), "y": round(y * k, 2), "angle": round((angle + 180.0) % 360.0 - 180.0, 2),
                     "layer": wp.layer, "bow_stage": wp.stage, "hand": "near" if wp.hand == "r" else "far"}
 
         for i, (tf, slot) in enumerate(zip(tpl.frames, self.slots)):
-            main = anchor(tf.weapon, slot.skeleton)
+            main = anchor(tf.weapon, slot)
             if main is None:
                 frames.append({"index": i + 1, "weapon": False})
                 continue
             entry = {"index": i + 1, "weapon": True, **main}
-            second = anchor(tf.weapon2, slot.skeleton)
+            second = anchor(tf.weapon2, slot)
             if second is not None:          # dual wielding: the other hand's weapon
                 entry["second"] = second
             frames.append(entry)

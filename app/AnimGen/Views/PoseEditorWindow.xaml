@@ -91,6 +91,22 @@
                     </StackPanel>
                 </Border>
 
+                <Border Style="{StaticResource Panel}">
+                    <StackPanel>
+                        <TextBlock x:Name="ShapeTitle" Style="{StaticResource TextTitle}" Text="Biến dạng khung 1"/>
+                        <TextBlock Style="{StaticResource TextMuted}" Margin="{StaticResource SpaceGap}"
+                                   Text="Phóng đại nhẹ trong khung này: bẹp hoặc giãn cả người, phóng to thu nhỏ một phần, kéo dài tay, uốn cong một phần. 100% và “Không” là giữ nguyên."/>
+                        <!-- Rows of a label and its choice, filled in code (ShapeRows) -->
+                        <Grid x:Name="ShapeGrid">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
                 <Border x:Name="StatusBorder" Style="{StaticResource Panel}" Visibility="Collapsed">
                     <DockPanel>
                         <TextBlock x:Name="StatusGlyph" Style="{StaticResource TextIcon}" Text="{StaticResource GlyphInfo}"/>

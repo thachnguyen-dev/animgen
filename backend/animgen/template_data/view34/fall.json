@@ -158,6 +158,9 @@
     null
    ],
    "contact": "air",
+   "shape": {
+    "squash": -0.05
+   },
    "weapon": {
     "hand": "r",
     "angle": -105.9,
@@ -238,6 +241,9 @@
     null
    ],
    "contact": "air",
+   "shape": {
+    "squash": -0.0429
+   },
    "weapon": {
     "hand": "r",
     "angle": -108.0,
@@ -318,6 +324,9 @@
     null
    ],
    "contact": "air",
+   "shape": {
+    "squash": -0.04
+   },
    "weapon": {
     "hand": "r",
     "angle": -110.5,
@@ -398,6 +407,9 @@
     null
    ],
    "contact": "air",
+   "shape": {
+    "squash": -0.0429
+   },
    "weapon": {
     "hand": "r",
     "angle": -108.0,
@@ -478,6 +490,9 @@
     null
    ],
    "contact": "air",
+   "shape": {
+    "squash": -0.05
+   },
    "weapon": {
     "hand": "r",
     "angle": -105.9,
@@ -558,6 +573,9 @@
     null
    ],
    "contact": "air",
+   "shape": {
+    "squash": -0.0571
+   },
    "weapon": {
     "hand": "r",
     "angle": -102.1,
@@ -638,6 +656,9 @@
     null
    ],
    "contact": "air",
+   "shape": {
+    "squash": -0.06
+   },
    "weapon": {
     "hand": "r",
     "angle": -100.0,
@@ -718,6 +739,9 @@
     null
    ],
    "contact": "air",
+   "shape": {
+    "squash": -0.0571
+   },
    "weapon": {
     "hand": "r",
     "angle": -102.1,

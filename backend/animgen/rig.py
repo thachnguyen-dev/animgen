@@ -41,6 +41,7 @@ from PIL import Image
 
 from .cloth import Hanging, bend, find_hanging, ground_speed, simulate
 from .puppet import PART_GROW, _cut, _drop_specks, _reference_bones, _segment_distance, _similarity, _target_bones
+from .shape import Shape, Warp, squash_matrix
 from .skeleton import LANK, NECK, RANK, Skeleton
 
 # Limb parts and the bones they hang on (names as puppet._target_bones).
@@ -119,14 +120,18 @@ class Rig:
 
     def render_keep(self, target: Skeleton, swing: dict[str, float] | None = None,
                     open_hands: tuple = (), floor: float | None = None, front: tuple = (),
-                    back: tuple = ()) -> tuple[Image.Image, np.ndarray]:
+                    back: tuple = (), shape: Shape | None = None) -> tuple[Image.Image, np.ndarray]:
         """``render`` and a mask of where the head and the hands show in the frame (not where something covers
         them), for the finishing pass. ``floor``: the ground line's y; a hanging part lies on it rather than through
-        it (a cape under a body fallen on its back)."""
+        it (a cape under a body fallen on its back). ``shape``: the frame's squash, part sizes and bends (shape.py;
+        its reach is already in ``target``)."""
         w, h = self.size
         out = np.zeros((h, w, 4), np.uint8)
         keep = np.zeros((h, w), bool)
         frame = _target_bones(target)
+        warp = Warp(shape, self.bind, frame) if shape is not None else None
+        if warp is not None and not warp.active():
+            warp = None
         has_open = {m.name for m in self.meshes if m.open_hand}
         for mesh in self.drawing_order(front, back):
             if mesh.name in has_open:
@@ -140,16 +145,20 @@ class Rig:
             for part in mesh.hanging:
                 if swing and swing.get(part.name):
                     verts = bend(verts, part, swing[part.name])
-            moved = _deform(mesh, mats, (h, w), verts, mesh.rgba)
+            moved = _deform(mesh, mats, (h, w), verts, mesh.rgba, warp)
             if floor is not None and mesh.hanging:
                 moved[int(math.ceil(floor)) + 1:] = 0
             if mesh.keep is not None:
-                held = _deform(mesh, mats, (h, w), verts, np.dstack([mesh.keep] * 4))[..., 3] > 127
+                held = _deform(mesh, mats, (h, w), verts, np.dstack([mesh.keep] * 4), warp)[..., 3] > 127
                 keep = (keep & ~(moved[..., 3] > 127)) | held
             k = moved[..., 3:4].astype(np.float32) / 255
             out[..., :3] = (moved[..., :3] * k + out[..., :3] * (1 - k)).astype(np.uint8)
             out[..., 3] = np.maximum(out[..., 3], moved[..., 3])
         _drop_specks(out)
+        m = squash_matrix(shape, target, floor)
+        if m is not None:
+            out = cv2.warpAffine(out, m, (w, h), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0, 0))
+            keep = cv2.warpAffine(keep.astype(np.uint8) * 255, m, (w, h), flags=cv2.INTER_LINEAR) > 127
         return Image.fromarray(out, "RGBA"), keep & (out[..., 3] > 0)
 
     def swings(self, targets: list[Skeleton], loop: bool) -> list[dict[str, float]]:
@@ -224,13 +233,15 @@ def _head_matrix(a, b, a2, b2) -> np.ndarray:
 
 
 def _deform(mesh: Mesh, mats: list[np.ndarray], size: tuple[int, int], verts: np.ndarray,
-            rgba: np.ndarray) -> np.ndarray:
+            rgba: np.ndarray, warp: Warp | None = None) -> np.ndarray:
     """The mesh's image bent by its bones: each vertex (``verts``: the bind-pose vertices, hanging parts already
     swung) moves by the weighted blend of its bones' moves, then every pixel of each moved triangle takes the colour
-    of the same place in the bind-pose triangle."""
+    of the same place in the bind-pose triangle. ``warp``: the frame's part sizes and bends, on top."""
     h, w = size
     homo = np.hstack([verts, np.ones((len(verts), 1))])
     moved = np.einsum("nk,kij,nj->ni", mesh.weights, np.stack(mats), homo)
+    if warp is not None:
+        moved = warp.apply(mesh.bones, mesh.weights, verts, moved)
     ids = np.full((h, w), -1, np.float32)
     for t, tri in enumerate(mesh.tris):
         cv2.fillConvexPoly(ids, np.round(moved[tri] * 16).astype(np.int32), float(t), cv2.LINE_8, 4)

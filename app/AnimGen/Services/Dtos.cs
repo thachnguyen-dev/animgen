@@ -87,6 +87,16 @@ public sealed class PoseFrame
     public List<string> Open { get; set; } = new();         // "r" near hand, "l" far hand
     public List<string> Front { get; set; } = new();        // arm_far, leg_far (3/4 view)
     public List<string> Back { get; set; } = new();         // arm (3/4 view)
+    public PoseShape Shape { get; set; } = new();           // squash, part sizes, reach, bends (backend shape.py)
+}
+
+/// <summary>A frame's small deformations (owner, 2026-10-31). Neutral: squash 0, sizes and reach 1, bends 0.</summary>
+public sealed class PoseShape
+{
+    public double Squash { get; set; }                         // + shorter and wider, - taller and thinner
+    public Dictionary<string, double> Size { get; set; } = new();    // head, hand_r, hand_l, foot_r, foot_l
+    public Dictionary<string, double> Reach { get; set; } = new();   // arm_r, arm_l
+    public Dictionary<string, double> Bend { get; set; } = new();    // degrees: torso, arm_r, arm_l, leg_r, leg_l
 }
 
 public sealed class PoseEditReply

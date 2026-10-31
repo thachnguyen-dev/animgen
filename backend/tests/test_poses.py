@@ -82,6 +82,28 @@ def test_saving_needs_a_name_and_eight_frames(editor):
         editor.delete("../idle")
 
 
+def test_a_frame_shape_is_shown_previewed_and_saved(editor):
+    # The built-in poses carry shapes (jump lands squashed); the editor shows them, draws them and keeps them.
+    frames = editor.start("side", "jump")["frames"]
+    assert frames[6]["shape"] == {"squash": 0.1}
+    fr = dict(frames[3], shape={"size": {"head": 1.3}, "reach": {"arm_r": 1.2}, "bend": {"torso": 10}})
+    from PIL import Image
+    plain = editor.preview("side", frames[3])
+    with Image.open(plain["image"]) as a:                    # only the latest preview is kept
+        before = a.tobytes()
+    shaped = editor.preview("side", fr)
+    assert close(shaped["points"], plain["points"])          # the joints shown are the pose's own
+    with Image.open(shaped["image"]) as b:
+        assert b.tobytes() != before
+    frames[3] = fr
+    tid = editor.save({"angle": "side", "name": "Nhảy to đầu", "frames": frames})["id"]
+    t = load_template(tid, angle="side")
+    assert t.frames[3].shape.size == {"head": 1.3} and t.frames[6].shape.squash == 0.1
+    assert editor.open(tid)["frames"][3]["shape"]["reach"] == {"arm_r": 1.2}
+    with pytest.raises(AppError):
+        editor.preview("side", dict(fr, shape={"squash": 3}))
+
+
 def test_the_preview_draws_the_sample(editor):
     from PIL import Image
     fr = editor.start("34", "walk")["frames"][3]

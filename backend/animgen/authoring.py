@@ -551,16 +551,69 @@ TEMPLATES = {
 }
 
 
-def build(tid: str) -> dict:
+# Squash/stretch, part sizes, reach and bends per frame (shape.py; owner, 2026-10-31: on every built-in pose, both
+# views). Frame index (0-based) -> shape. Squash + is shorter and wider (a landing), - taller and thinner (a leap);
+# bend + arches forward (the back arched), - hunches. Kept small: about 10 % squash, 15 % size, 8 degrees.
+def _breathe() -> dict[int, dict]:
+    return {i: {"squash": round(-0.02 * (1 - math.cos(_cyc(i))) / 2, 4)} for i in range(1, 8)}
+
+
+SHAPES: dict[str, dict[int, dict]] = {
+    "idle": _breathe(),
+    "walk": {0: {"squash": -0.015}, 2: {"squash": 0.03}, 4: {"squash": -0.015}, 6: {"squash": 0.03}},
+    "run": {0: {"squash": 0.06, "bend": {"torso": -4}}, 1: {"squash": 0.02, "bend": {"torso": -4}},
+            2: {"squash": -0.05, "bend": {"torso": -4}}, 3: {"bend": {"torso": -4}},
+            4: {"squash": 0.06, "bend": {"torso": -4}}, 5: {"squash": 0.02, "bend": {"torso": -4}},
+            6: {"squash": -0.05, "bend": {"torso": -4}}, 7: {"bend": {"torso": -4}}},
+    "jump": {0: {"squash": 0.10}, 1: {"squash": -0.08}, 2: {"squash": -0.10}, 3: {"squash": -0.04},
+             4: {"bend": {"torso": 6}}, 5: {"squash": -0.05}, 6: {"squash": 0.10}, 7: {"squash": 0.03}},
+    # Fall loops in the air (no landing frame): only a stretch.
+    "fall": {i: {"squash": round(-0.05 + 0.01 * math.sin(_cyc(i)), 4)} for i in range(8)},
+    "hit": {1: {"squash": 0.06, "size": {"head": 0.92}, "bend": {"torso": 8}},
+            2: {"squash": -0.02, "size": {"head": 0.96}, "bend": {"torso": 10}},
+            3: {"bend": {"torso": 6}}, 4: {"bend": {"torso": 2}}},
+    "death": {1: {"squash": 0.04}, 2: {"bend": {"torso": -8}}, 3: {"bend": {"torso": -6}},
+              4: {"squash": 0.06}, 5: {"squash": -0.02}},
+    "a1a": {1: {"squash": 0.04}, 2: {"squash": 0.05}, 3: {"bend": {"arm_r": 8}},
+            4: {"squash": -0.04, "size": {"hand_r": 1.08}, "bend": {"arm_r": 5}},
+            5: {"squash": -0.05, "size": {"hand_r": 1.15}}},
+    "a1b": {1: {"squash": 0.03}, 2: {"size": {"foot_r": 1.06}},
+            3: {"size": {"foot_r": 1.15}, "bend": {"torso": 4}}, 4: {"size": {"foot_r": 1.15}, "bend": {"torso": 4}},
+            5: {"size": {"foot_r": 1.06}}},
+    "a2": {2: {"squash": 0.05}, 3: {"bend": {"arm_r": -8}}, 4: {"squash": -0.04, "bend": {"arm_r": -5}},
+           5: {"squash": -0.03}},
+    "a2b": {1: {"squash": 0.04}, 2: {"squash": 0.04}, 3: {"reach": {"arm_r": 1.05}},
+            4: {"squash": -0.03, "reach": {"arm_r": 1.10}}, 5: {"reach": {"arm_r": 1.08}}},
+    "a2c": {1: {"squash": -0.04}, 2: {"squash": -0.04}, 3: {"bend": {"arm_r": -8}}, 4: {"squash": 0.05},
+            5: {"squash": 0.05}},
+    "a2d": {1: {"squash": 0.05}, 2: {"squash": 0.05}, 3: {"bend": {"arm_r": -8}},
+            4: {"squash": -0.05, "bend": {"arm_r": -8}}, 5: {"squash": -0.05}},
+    "a3": {1: {"squash": 0.04}, 2: {"squash": -0.04}, 3: {"squash": -0.04},
+           5: {"squash": 0.07, "bend": {"torso": -8}}, 6: {"squash": 0.09, "bend": {"torso": -10}}},
+    "a4": {1: {"squash": 0.05}, 3: {"squash": -0.04, "bend": {"torso": -5}},
+           4: {"squash": -0.05, "bend": {"torso": -5}}, 5: {"bend": {"torso": -5}}},
+    "a5": {3: {"bend": {"torso": 2}}, 4: {"bend": {"torso": 5}}, 5: {"bend": {"torso": 5}}, 6: {"bend": {"torso": 3}}},
+    "a6": {2: {"squash": -0.03}, 3: {"squash": -0.03}, 4: {"squash": -0.03}, 5: {"squash": -0.03}},
+    "a7": {1: {"squash": 0.04}, 2: {"squash": 0.04}, 3: {"squash": -0.03, "size": {"hand_l": 1.08}},
+           4: {"squash": -0.04, "size": {"hand_l": 1.15}}, 5: {"size": {"hand_l": 1.10}}},
+    "a8a": {1: {"squash": 0.03}, 2: {"squash": -0.03, "bend": {"arm_r": -6}}, 3: {"squash": 0.03},
+            4: {"squash": -0.03, "bend": {"arm_l": -6}}},
+    "a8b": {2: {"squash": -0.03}, 4: {"squash": 0.05}, 5: {"squash": 0.03}},
+}
+
+
+def build(tid: str, shapes: bool = True) -> dict:
     spec = TEMPLATES[tid]
     poses: list[Pose] = spec["fn"]()
     assert len(poses) == 8, tid
     rest_pts, _ = solve(Pose())
     frames = []
-    for p in poses:
+    for i, p in enumerate(poses):
         pts, grounded = solve(p)
         fr = {"points": [None if q is None else [q[0], q[1]] for q in pts],
               "contact": "ground" if grounded else "air"}
+        if shapes and SHAPES.get(tid, {}).get(i):
+            fr["shape"] = SHAPES[tid][i]
         if p.open:
             fr["open"] = list(p.open)
         if spec["grip"] != "never":

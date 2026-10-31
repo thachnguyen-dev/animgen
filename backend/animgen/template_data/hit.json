@@ -229,6 +229,15 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": 0.06,
+    "size": {
+     "head": 0.92
+    },
+    "bend": {
+     "torso": 8
+    }
+   },
    "weapon": {
     "hand": "r",
     "angle": -20.0,
@@ -306,6 +315,15 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": -0.02,
+    "size": {
+     "head": 0.96
+    },
+    "bend": {
+     "torso": 10
+    }
+   },
    "weapon": {
     "hand": "r",
     "angle": -40.0,
@@ -383,6 +401,11 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "bend": {
+     "torso": 6
+    }
+   },
    "weapon": {
     "hand": "r",
     "angle": -25.0,
@@ -460,6 +483,11 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "bend": {
+     "torso": 2
+    }
+   },
    "weapon": {
     "hand": "r",
     "angle": -5.0,

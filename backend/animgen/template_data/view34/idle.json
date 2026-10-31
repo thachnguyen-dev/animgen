@@ -238,6 +238,9 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": -0.0029
+   },
    "weapon": {
     "hand": "r",
     "angle": 48.1,
@@ -318,6 +321,9 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": -0.01
+   },
    "weapon": {
     "hand": "r",
     "angle": 45.5,
@@ -398,6 +404,9 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": -0.0171
+   },
    "weapon": {
     "hand": "r",
     "angle": 42.8,
@@ -478,6 +487,9 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": -0.02
+   },
    "weapon": {
     "hand": "r",
     "angle": 41.7,
@@ -558,6 +570,9 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": -0.0171
+   },
    "weapon": {
     "hand": "r",
     "angle": 42.8,
@@ -638,6 +653,9 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": -0.01
+   },
    "weapon": {
     "hand": "r",
     "angle": 45.5,
@@ -718,6 +736,9 @@
     null
    ],
    "contact": "ground",
+   "shape": {
+    "squash": -0.0029
+   },
    "weapon": {
     "hand": "r",
     "angle": 48.1,

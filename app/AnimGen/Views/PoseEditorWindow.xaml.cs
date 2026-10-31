@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -27,6 +28,9 @@ public sealed class PoseCell : ObservableObject
 
 /// <summary>Where a new pose starts from: an existing animation, or standing (null id).</summary>
 public sealed record PoseBase(string? Id, string Name);
+
+/// <summary>One choice of a deformation value, as the owner reads it.</summary>
+public sealed record ShapeStep(double Value, string Text);
 
 /// <summary>
 /// The pose editor (owner, 2026-10-31; DECISIONS.md "Pose editor"): the sample character is posed in 8 frames by
@@ -61,6 +65,25 @@ public partial class PoseEditorWindow : Window
     private const double ViewMargin = 0.35;     // around every frame's joints, as a share of the figure's height
     private const double PlayInterval = 125;    // ms per frame: 8 frames per second, as the main window plays
 
+    // The deformations of a frame (backend shape.py): group, key, label. Group "" is the squash of the whole body.
+    private static readonly (string Group, string Key, string Label)[] ShapeRows =
+    {
+        ("", "squash", "Bẹp hoặc giãn cả người"),
+        ("size", "head", "Đầu"), ("size", "hand_r", "Bàn tay gần"), ("size", "hand_l", "Bàn tay xa"),
+        ("size", "foot_r", "Bàn chân gần"), ("size", "foot_l", "Bàn chân xa"),
+        ("reach", "arm_r", "Độ dài tay gần"), ("reach", "arm_l", "Độ dài tay xa"),
+        ("bend", "torso", "Uốn thân"), ("bend", "arm_r", "Uốn tay gần"), ("bend", "arm_l", "Uốn tay xa"),
+        ("bend", "leg_r", "Uốn chân gần"), ("bend", "leg_l", "Uốn chân xa"),
+    };
+    private static readonly double[] SquashSteps =
+        { -0.2, -0.15, -0.1, -0.08, -0.06, -0.05, -0.04, -0.03, -0.02, 0, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.1, 0.15, 0.2 };
+    private static readonly double[] SizeSteps = { 0.7, 0.8, 0.85, 0.9, 0.92, 0.95, 1, 1.05, 1.08, 1.1, 1.15, 1.2, 1.3, 1.4 };
+    private static readonly double[] ReachSteps = { 0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.08, 1.1, 1.15, 1.2, 1.25 };
+    private static readonly double[] BendSteps = { -25, -20, -15, -10, -8, -6, -5, -4, -2, 0, 2, 3, 4, 5, 6, 8, 10, 15, 20, 25 };
+    private static readonly System.Globalization.CultureInfo Vi = new("vi-VN");
+    private readonly Dictionary<(string, string), ComboBox> _shapeBoxes = new();
+    private bool _showingShape;                  // filling the choices for a frame, not the owner choosing
+
     private readonly BackendClient _api;
     private readonly IReadOnlyList<PoseBase> _bases;
     private readonly ObservableCollection<PoseCell> _cells = new();
@@ -87,6 +110,7 @@ public partial class PoseEditorWindow : Window
         _api = api;
         _bases = bases;
         InitializeComponent();
+        BuildShapeRows();
         Strip.ItemsSource = _cells;
         for (int i = 0; i < FrameCount; i++) _cells.Add(new PoseCell { Index = i });
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(PlayInterval) };
@@ -130,6 +154,10 @@ public partial class PoseEditorWindow : Window
     {
         Points = f.Points.Select(p => p == null ? null : new[] { p[0], p[1] }).ToList(),
         Contact = f.Contact, Open = f.Open.ToList(), Front = f.Front.ToList(), Back = f.Back.ToList(),
+        Shape = new PoseShape
+        {
+            Squash = f.Shape.Squash, Size = new(f.Shape.Size), Reach = new(f.Shape.Reach), Bend = new(f.Shape.Bend),
+        },
     };
 
     /// <summary>The part of the canvas shown: every frame's joints with room to move around them.</summary>
@@ -157,6 +185,7 @@ public partial class PoseEditorWindow : Window
         FarArmFrontBox.IsChecked = f.Front.Contains("arm_far");
         FarLegFrontBox.IsChecked = f.Front.Contains("leg_far");
         NearArmBackBox.IsChecked = f.Back.Contains("arm");
+        ShowShape(f.Shape);
         ShowFrame(i);
     }
 
@@ -373,6 +402,80 @@ public partial class PoseEditorWindow : Window
         if (FarArmFrontBox.IsChecked == true) f.Front.Add("arm_far");
         if (FarLegFrontBox.IsChecked == true) f.Front.Add("leg_far");
         f.Back = NearArmBackBox.IsChecked == true ? new List<string> { "arm" } : new List<string>();
+        _dirty = true;
+        await PreviewAsync(_current);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------
+    // Deformations of the frame
+    // ---------------------------------------------------------------------------------------------------------
+    private void BuildShapeRows()
+    {
+        for (int r = 0; r < ShapeRows.Length; r++)
+        {
+            (string group, string key, string label) = ShapeRows[r];
+            ShapeGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var text = new TextBlock { Text = label, FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+            text.Margin = (Thickness)FindResource("SpaceGap");
+            var box = new ComboBox { DisplayMemberPath = nameof(ShapeStep.Text), Tag = (group, key) };
+            AutomationProperties.SetName(box, label);
+            box.SelectionChanged += ShapeBox_SelectionChanged;
+            Grid.SetRow(text, r);
+            Grid.SetRow(box, r);
+            Grid.SetColumn(box, 2);
+            ShapeGrid.Children.Add(text);
+            ShapeGrid.Children.Add(box);
+            _shapeBoxes[(group, key)] = box;
+        }
+    }
+
+    /// <summary>A bend pushes the middle of the part forward (+) or back (-): for the torso that is an arched back
+    /// or a hunch.</summary>
+    private static string StepText(string group, string key, double v) => group switch
+    {
+        "" => Math.Abs(v) < 1e-9 ? "Không" : $"{(v > 0 ? "Bẹp" : "Giãn")} {Math.Abs(v * 100).ToString("0.#", Vi)}%",
+        "bend" when Math.Abs(v) < 1e-9 => "Không",
+        "bend" when key == "torso" => $"{(v > 0 ? "Ưỡn" : "Khom")} {Math.Abs(v).ToString("0.#", Vi)}°",
+        "bend" => $"{(v > 0 ? "Ra trước" : "Ra sau")} {Math.Abs(v).ToString("0.#", Vi)}°",
+        _ => $"{(v * 100).ToString("0.#", Vi)}%",
+    };
+
+    /// <summary>The choices of each row for this frame, its own value among them even when it is not a usual
+    /// step (a built-in pose may use one).</summary>
+    private void ShowShape(PoseShape s)
+    {
+        _showingShape = true;
+        ShapeTitle.Text = $"Biến dạng khung {_current + 1}";
+        foreach (((string group, string key), ComboBox box) in _shapeBoxes)
+        {
+            double value = ShapeValue(s, group, key);
+            double[] steps = group switch { "" => SquashSteps, "size" => SizeSteps, "reach" => ReachSteps, _ => BendSteps };
+            var items = steps.Append(value).Select(v => Math.Round(v, 4)).Distinct().OrderBy(v => v)
+                             .Select(v => new ShapeStep(v, StepText(group, key, v))).ToList();
+            box.ItemsSource = items;
+            box.SelectedItem = items.First(it => Math.Abs(it.Value - Math.Round(value, 4)) < 1e-9);
+        }
+        _showingShape = false;
+    }
+
+    private static double ShapeValue(PoseShape s, string group, string key) => group switch
+    {
+        "" => s.Squash,
+        "size" => s.Size.GetValueOrDefault(key, 1.0),
+        "reach" => s.Reach.GetValueOrDefault(key, 1.0),
+        _ => s.Bend.GetValueOrDefault(key, 0.0),
+    };
+
+    private async void ShapeBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_showingShape || sender is not ComboBox { Tag: (string group, string key), SelectedItem: ShapeStep step }) return;
+        PoseShape s = _frames[_current].Shape;
+        // A neutral value is left out, so a saved pose carries only what was changed.
+        Dictionary<string, double>? values = group switch { "size" => s.Size, "reach" => s.Reach, "bend" => s.Bend, _ => null };
+        double neutral = group is "size" or "reach" ? 1.0 : 0.0;
+        if (values == null) s.Squash = step.Value;
+        else if (Math.Abs(step.Value - neutral) < 1e-9) values.Remove(key);
+        else values[key] = step.Value;
         _dirty = true;
         await PreviewAsync(_current);
     }

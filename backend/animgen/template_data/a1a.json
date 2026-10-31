@@ -216,7 +216,10 @@
     ],
     null
    ],
-   "contact": "ground"
+   "contact": "ground",
+   "shape": {
+    "squash": 0.04
+   }
   },
   {
    "points": [
@@ -287,7 +290,10 @@
     ],
     null
    ],
-   "contact": "ground"
+   "contact": "ground",
+   "shape": {
+    "squash": 0.05
+   }
   },
   {
    "points": [
@@ -358,7 +364,12 @@
     ],
     null
    ],
-   "contact": "ground"
+   "contact": "ground",
+   "shape": {
+    "bend": {
+     "arm_r": 8
+    }
+   }
   },
   {
    "points": [
@@ -429,7 +440,16 @@
     ],
     null
    ],
-   "contact": "ground"
+   "contact": "ground",
+   "shape": {
+    "squash": -0.04,
+    "size": {
+     "hand_r": 1.08
+    },
+    "bend": {
+     "arm_r": 5
+    }
+   }
   },
   {
    "points": [
@@ -500,7 +520,13 @@
     ],
     null
    ],
-   "contact": "ground"
+   "contact": "ground",
+   "shape": {
+    "squash": -0.05,
+    "size": {
+     "hand_r": 1.15
+    }
+   }
   },
   {
    "points": [
