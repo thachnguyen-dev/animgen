@@ -62,6 +62,8 @@ public sealed class MainViewModel : ObservableObject
         for (int i = 1; i <= 8; i++) Frames.Add(new FrameItem(i));
 
         ChooseCharacterCommand = new AsyncCommand(_ => ChooseCharacterAsync(), OnError, _ => Ready && !IsBusy);
+        ChangeAngleCommand = new AsyncCommand(_ => ChangeAngleAsync(), OnError,
+                                              _ => Ready && !IsBusy && _characterPath != null);
         FlipFacingCommand = new AsyncCommand(_ => FlipFacingAsync(), OnError,
                                              _ => Ready && !IsBusy && _characterPath != null);
         MakeRigCommand = new AsyncCommand(_ => MakeRigAsync(null), OnError,
@@ -220,6 +222,10 @@ public sealed class MainViewModel : ObservableObject
     public string FacingText { get => _facingText; private set => Set(ref _facingText, value); }
     private string _facing = "right";
 
+    private string _angleText = "";
+    public string AngleText { get => _angleText; private set => Set(ref _angleText, value); }
+    private string _angle = "side";
+
     private AnimationInfo? _selectedAnimation;
     public AnimationInfo? SelectedAnimation
     {
@@ -304,6 +310,7 @@ public sealed class MainViewModel : ObservableObject
 
     public ICommand ChooseCharacterCommand { get; }
     public ICommand FlipFacingCommand { get; }
+    public ICommand ChangeAngleCommand { get; }
     public ICommand MakeRigCommand { get; }
     public ICommand RedrawRigPartCommand { get; }
     public ICommand EditRigCommand { get; }
@@ -370,6 +377,33 @@ public sealed class MainViewModel : ObservableObject
         await SetCharacterAsync(_characterPath, _facing == "left" ? "right" : "left");
     }
 
+    /// <summary>Side view or three-quarter view: which pose set the animations are made from.</summary>
+    private async Task ChangeAngleAsync()
+    {
+        if (_api == null || _characterPath == null) return;
+        StopPlay();
+        bool hadFrames = HasFrames;
+        SetStatus(StatusKind.Busy, "Đang đổi góc nhìn…");
+        CharacterReply r = await _api.SetAngleAsync(_angle == "34" ? "side" : "34");
+        ApplyAngle(r.Character!);
+        if (r.State != null) ApplyState(r.State);
+        SetStatus(StatusKind.Ok, (_angle == "34" ? "Các hoạt ảnh sẽ dùng bộ tư thế nhìn ba phần tư."
+                                                 : "Các hoạt ảnh sẽ dùng bộ tư thế nhìn ngang.")
+                                 + (hadFrames ? " Các khung đã tạo theo góc cũ đã được bỏ, hãy bấm Tạo lại." : ""));
+    }
+
+    private void ApplyAngle(CharacterInfo c)
+    {
+        _angle = c.Angle;
+        string view = c.Angle == "34" ? "ba phần tư" : "ngang";
+        AngleText = c.AngleSource switch
+        {
+            "owner" => $"Góc nhìn: {view} (bạn chọn).",
+            "saved" => $"Góc nhìn: {view} (đã lưu cùng khung xương).",
+            _ => $"Góc nhìn: {view} (tự nhận ra).",
+        };
+    }
+
     private async Task SetCharacterAsync(string path, string? facing)
     {
         if (_api == null) return;
@@ -398,6 +432,7 @@ public sealed class MainViewModel : ObservableObject
             "saved" => $"Hướng: {dir} (đã lưu cùng khung xương).",
             _ => $"Hướng: {dir} (giả định — bấm “Đổi hướng” nếu sai).",
         };
+        ApplyAngle(c);
         Skeleton = c.Skeleton;
         if (r.State != null) ApplyState(r.State);
         CommandManager.InvalidateRequerySuggested();

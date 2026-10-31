@@ -54,6 +54,8 @@ public sealed class CharacterInfo
     public int FigureHeight { get; set; }
     public string Facing { get; set; } = "right";
     public string FacingSource { get; set; } = "assumed";   // detected | assumed | owner | saved
+    public string Angle { get; set; } = "side";             // side | 34 (three-quarter view): the pose set
+    public string AngleSource { get; set; } = "detected";   // detected | owner | saved
     public string Name { get; set; } = "";
     public SkeletonInfo? Skeleton { get; set; }
 }

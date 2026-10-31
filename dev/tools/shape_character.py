@@ -28,6 +28,7 @@ HERE = Path(__file__).resolve()
 sys.path.insert(0, str(HERE.parents[2] / "backend"))
 from animgen import parts as parts_mod  # noqa: E402
 from animgen.authoring import Pose, solve  # noqa: E402
+from animgen.authoring34 import Pose3, project, solve3  # noqa: E402
 from animgen.engines.demo import DemoEngine  # noqa: E402
 from animgen.session import LAYERS_DIR, LAYERS_INFO, PSD_FILE, Session  # noqa: E402
 from animgen.skeleton import (LANK, LELB, LEYE, LHIP, LKNE, LSHO, LWRI, NECK, NOSE, RANK, REAR, RELB, REYE, RHIP,  # noqa
@@ -37,9 +38,7 @@ from animgen.templates import ANIMATIONS  # noqa: E402
 
 IMAGE = HERE.parents[2] / "dev" / "test_art" / "test_shapes.png"
 IMAGE_34 = HERE.parents[2] / "dev" / "test_art" / "test_shapes_34.png"
-# Three-quarter view: how far back the far side sits (template units), and the wider torso.
-BACK_34 = {"shoulder": 0.075, "hip": 0.05}
-TORSO_PAD_34 = 0.035
+TORSO_PAD_34 = 0.03        # the torso block reaches this far past the shoulder and hip joints
 # The character's own pose (the bind pose): arms and legs a little apart so every part shows.
 BIND = Pose(spine=2, head=0, r_sh=22, r_el=25, l_sh=-22, l_el=25, r_hip=14, r_knee=4, l_hip=-12, l_knee=4)
 FIGURE_PX = 900            # figure height in the drawn image
@@ -57,14 +56,12 @@ LIMBS = {"far_arm_upper": (LSHO, LELB), "far_arm_lower": (LELB, LWRI), "far_leg_
 
 def joints(size: tuple[int, int], view: str = "side") -> tuple[list, float]:
     """The bind pose in image pixels, feet on a line near the bottom, and pixels per template unit."""
-    pts, _ = solve(BIND)
     if view == "34":
-        pts = list(pts)
-        for idx, back in ((LSHO, "shoulder"), (LELB, "shoulder"), (LWRI, "shoulder"),
-                          (LHIP, "hip"), (LKNE, "hip"), (LANK, "hip")):
-            pts[idx] = (pts[idx][0] - BACK_34[back], pts[idx][1] - 0.006)   # the far side a little higher too
-        pts[REYE] = (pts[REYE][0] - 0.03, pts[REYE][1])                     # the near eye toward the middle
-        pts[LEYE] = (pts[REYE][0] + 0.045, pts[REYE][1] - 0.002)            # the far eye by the front edge
+        # The same body in 3D, turned 45 degrees toward the viewer (authoring34): the near arm at the back edge of
+        # the body, the far arm at its front edge, both eyes and the near ear showing.
+        pts = solve3(Pose3(base=BIND, chest=0.0, hips=0.0, r_out=14.0, l_out=14.0))[0]
+    else:
+        pts, _ = solve(BIND)
     u = FIGURE_PX
     w, h = size
     return [None if p is None else (w * 0.45 + p[0] * u, h - 40 + p[1] * u) for p in pts], u
@@ -99,23 +96,30 @@ def draw_layers(P: list, u: float, size: tuple[int, int], view: str = "side") ->
             d = np.subtract(P[b], P[a]) / (np.linalg.norm(np.subtract(P[b], P[a])) + 1e-6)
             fist = SKIN if not name.startswith("far") else tuple(int(c * 0.8) for c in SKIN)
             _circle(img, np.add(P[b], d * 0.025 * u), 0.036 * u, fist, line)
-        if kind == "leg_lower":            # the foot points forward
+        if kind == "leg_lower":            # the foot points forward (in 3/4: forward and toward the viewer)
             dark = (70, 70, 80) if not name.startswith("far") else (50, 50, 58)
             ankle = P[b]
-            _capsule(img, (ankle[0] - 0.01 * u, ankle[1] + 0.012 * u), (ankle[0] + 0.07 * u, ankle[1] + 0.02 * u),
-                     0.045 * u, dark, line)
+            fx, fy, _ = project((0.07, 0.0, 0.0)) if view == "34" else (0.07, 0.0, 0.0)
+            _capsule(img, (ankle[0] - 0.01 * u, ankle[1] + 0.012 * u),
+                     (ankle[0] + fx * u, ankle[1] + (0.02 + fy) * u), 0.045 * u, dark, line)
         out[name] = img
     # Torso: a capsule from the neck to the middle of the hips (side), or a block over both shoulders and hips (3/4).
     img = blank()
     hip = ((P[RHIP][0] + P[LHIP][0]) / 2, (P[RHIP][1] + P[LHIP][1]) / 2)
     if view == "34":
+        # A block over both shoulders and both hips; the chest faces partly toward the viewer.
         pad = TORSO_PAD_34 * u
-        quad = np.array([(P[LSHO][0] - pad, P[LSHO][1] - 0.01 * u), (P[RSHO][0] + pad, P[RSHO][1] - 0.01 * u),
-                         (P[RHIP][0] + pad, P[RHIP][1] + 0.02 * u), (P[LHIP][0] - pad, P[LHIP][1] + 0.02 * u)],
-                        np.int32)
+        sl, sr = sorted((P[RSHO], P[LSHO]))
+        hl, hr = sorted((P[RHIP], P[LHIP]))
+        quad = np.array([(sl[0] - pad, sl[1] - 0.01 * u), (sr[0] + pad, sr[1] - 0.01 * u),
+                         (hr[0] + pad, hr[1] + 0.02 * u), (hl[0] - pad, hl[1] + 0.02 * u)], np.int32)
         cv2.polylines(img, [quad], True, (*OUTLINE, 255), int(2 * line + 0.05 * u), cv2.LINE_AA)
         cv2.polylines(img, [quad], True, (*COLOUR["torso"], 255), int(0.05 * u), cv2.LINE_AA)
         cv2.fillPoly(img, [quad], (*COLOUR["torso"], 255), cv2.LINE_AA)
+        mid = ((sl[0] + sr[0]) / 2 + 0.02 * u, sl[1] + 0.005 * u)     # a V collar, toward the front of the chest
+        for end in ((mid[0] - 0.035 * u, mid[1] - 0.01 * u), (mid[0] + 0.035 * u, mid[1] - 0.01 * u)):
+            cv2.line(img, (int(mid[0]), int(mid[1] + 0.05 * u)), (int(end[0]), int(end[1])), (*OUTLINE, 255), line,
+                     cv2.LINE_AA)
     else:
         _capsule(img, (P[NECK][0], P[NECK][1] + 0.02 * u), hip, WIDTH["torso"] * u, COLOUR["torso"], line)
     cv2.line(img, (int(hip[0] - 0.07 * u), int(hip[1] - 0.01 * u)), (int(hip[0] + 0.07 * u), int(hip[1] - 0.01 * u)),
@@ -139,6 +143,13 @@ def draw_layers(P: list, u: float, size: tuple[int, int], view: str = "side") ->
         d.ellipse((e[0] - 0.002 * u, e[1] - 0.008 * u, e[0] + 0.012 * s * u, e[1] + 0.008 * u), fill=(*OUTLINE, 255))
     m = (P[NOSE][0] - 0.015 * u, P[NOSE][1] + 0.03 * u)
     d.line((m[0] - 0.02 * u, m[1], m[0] + 0.005 * u, m[1]), fill=(*OUTLINE, 255), width=line)
+    if view == "34":                       # the near ear and a nose on the front of the face
+        ear = P[REAR]
+        d.ellipse((ear[0] - 0.014 * u, ear[1] - 0.022 * u, ear[0] + 0.014 * u, ear[1] + 0.022 * u), fill=SKIN + (255,),
+                  outline=(*OUTLINE, 255), width=line)
+        n = P[NOSE]
+        d.line((n[0] - 0.005 * u, n[1] - 0.03 * u, n[0] + 0.012 * u, n[1] - 0.005 * u, n[0] - 0.006 * u, n[1]),
+               fill=(*OUTLINE, 255), width=max(1, line // 2))
     out["head"] = np.array(pil)
     # The open hand (frames that open the near hand): a palm with four fingers and a thumb past the wrist.
     img = blank()
@@ -193,6 +204,7 @@ def main() -> None:
         return None if p is None else [can[0] + (p[0] - raw[0]) * k, can[1] + (p[1] - raw[1]) * k]
     pts = [to_canvas(p) for p in P]
     ch = s.confirm_skeleton(pts)
+    ch = s.set_angle(view)                 # which pose set: the side one, or the 3/4 one
 
     # 3. The rig: the same shapes drawn on the canvas are the body-part layers (bind pose = the image's pose).
     canvas = ch.placement.image.size

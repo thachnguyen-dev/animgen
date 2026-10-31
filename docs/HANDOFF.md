@@ -105,3 +105,5 @@ PowerShell scripts.
 - Part map flow (DECISIONS.md "Part map from the owner's own image"): POST /rig (part "parts"|"hand"),
   /rig/rebuild, /rig/map; RigInfo.Stage in the app; step 2 shows the map, "Vẽ phần bị che", "Tách lại",
   "Về bản đồ".
+- Three-quarter pose set (DECISIONS.md "Three-quarter view pose set"): authoring34.py ->
+  template_data/view34 and docs/templates/view34; POST /character/angle; step 1 "Đổi góc nhìn".

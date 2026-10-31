@@ -87,14 +87,38 @@ class Rig:
     bind: dict                          # bind bone name -> (a, b)
     size: tuple[int, int]
 
-    def render(self, target: Skeleton, swing: dict[str, float] | None = None, open_hands: tuple = ()) -> Image.Image:
+    def render(self, target: Skeleton, swing: dict[str, float] | None = None, open_hands: tuple = (),
+               front: tuple = (), back: tuple = ()) -> Image.Image:
         """The character in the target pose (RGBA, canvas-sized, transparent around). ``swing``: the hanging parts'
         angles (``swings``); without it they hang as drawn. ``open_hands``: "r" near, "l" far, drawn open when the
-        rig has an open hand."""
-        return self.render_keep(target, swing, open_hands)[0]
+        rig has an open hand. ``front``/``back``: meshes drawn in front of / behind the body in this frame."""
+        return self.render_keep(target, swing, open_hands, front=front, back=back)[0]
+
+    def drawing_order(self, front: tuple = (), back: tuple = ()) -> list[Mesh]:
+        """The meshes back to front for one frame: as built, except that a far arm in ``front`` comes just before
+        the near arm, a far leg in ``front`` just after the near leg, and a near arm in ``back`` just before the body
+        (3/4 view: what is nearer the viewer changes with the motion)."""
+        order = list(self.meshes)
+        for name, anchor, after in (("arm_far", "arm", False), ("leg_far", "leg", True)):
+            if name not in front:
+                continue
+            moving = [m for m in order if m.name == name]
+            rest = [m for m in order if m.name != name]
+            idx = [i for i, m in enumerate(rest) if m.name == anchor]
+            if moving and idx:
+                at = idx[-1] + 1 if after else idx[0]
+                order = rest[:at] + moving + rest[at:]
+        if "arm" in back:
+            moving = [m for m in order if m.name == "arm"]
+            rest = [m for m in order if m.name != "arm"]
+            idx = [i for i, m in enumerate(rest) if m.name == "body"]
+            if moving and idx:
+                order = rest[:idx[0]] + moving + rest[idx[0]:]
+        return order
 
     def render_keep(self, target: Skeleton, swing: dict[str, float] | None = None,
-                    open_hands: tuple = (), floor: float | None = None) -> tuple[Image.Image, np.ndarray]:
+                    open_hands: tuple = (), floor: float | None = None, front: tuple = (),
+                    back: tuple = ()) -> tuple[Image.Image, np.ndarray]:
         """``render`` and a mask of where the head and the hands show in the frame (not where something covers
         them), for the finishing pass. ``floor``: the ground line's y; a hanging part lies on it rather than through
         it (a cape under a body fallen on its back)."""
@@ -103,7 +127,7 @@ class Rig:
         keep = np.zeros((h, w), bool)
         frame = _target_bones(target)
         has_open = {m.name for m in self.meshes if m.open_hand}
-        for mesh in self.meshes:
+        for mesh in self.drawing_order(front, back):
             if mesh.name in has_open:
                 wanted = ("r" if mesh.name == "arm" else "l") in open_hands
                 if mesh.open_hand != wanted:

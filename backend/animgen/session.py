@@ -41,10 +41,10 @@ from .errors import AppError
 from .frames import Placement, clean_alpha, fit_to_canvas, place_reference, validate_image
 from .imaging import pick_background_colour, save_png
 from .inputs import CharacterInput, check_character
-from .skeleton import (LANK, LELB, LHIP, LKNE, LSHO, LWRI, NECK, RANK, RELB, RHIP, RKNE, RSHO, RWRI, Proportions,
-                       Skeleton, fit_frame, hand_point, measure)
+from .skeleton import (LANK, LELB, LEYE, LHIP, LKNE, LSHO, LWRI, NECK, RANK, RELB, REYE, RHIP, RKNE, RSHO, RWRI,
+                       Proportions, Skeleton, fit_frame, hand_point, measure)
 from .tasks import Task
-from .templates import MotionTemplate, load_template, ANIMATIONS
+from .templates import ANGLES, ANIMATIONS, MotionTemplate, load_template
 from . import export as export_mod
 
 
@@ -60,6 +60,8 @@ class Character:
     skeleton_source: str = "detected"   # 'detected' (DWPose), 'proportions' (fallback) or 'saved' (owner)
     skeleton_confirmed: bool = False
     view_image: Path | None = None      # the canvas image in the character's own facing, for the skeleton editor
+    angle: str = "side"                 # 'side' or '34' (turned three-quarters toward the viewer): the pose set
+    angle_source: str = "detected"      # 'detected', 'owner' or 'saved'
 
     def view_points(self) -> list:
         """The skeleton on ``view_image`` (the character's own facing), as the editor shows it."""
@@ -68,6 +70,7 @@ class Character:
 
     def to_json(self) -> dict:
         return {**self.input.summary(), "facing": self.facing, "facing_source": self.facing_source,
+                "angle": self.angle, "angle_source": self.angle_source,
                 "name": self.name, "placement": self.placement.to_json(),
                 "skeleton": {"image": str(self.view_image) if self.view_image else None,
                              "size": self.placement.image.width, "points": self.view_points(),
@@ -91,6 +94,22 @@ MAP_DIR = "map"
 MAP_FILE = "map.psd"
 FAR_BEHIND = 0.02         # of the figure height: a far limb the owner did not place is this far behind the near one
 EDIT_MIN_DRAWN = 0.25     # the edited layers keep at least this share of the drawn pixels
+
+
+def guess_angle(sk: Skeleton) -> str:
+    """'34' when the skeleton shows a body turned toward the viewer: both eyes found and the shoulders or hips well
+    apart across the picture (in a side view they nearly overlap); 'side' otherwise. The owner can change it."""
+    pts = [p for p in sk.points if p is not None]
+    if len(pts) < 4:
+        return "side"
+    height = max(p[1] for p in pts) - min(p[1] for p in pts)
+    if height <= 0 or sk.points[REYE] is None or sk.points[LEYE] is None:
+        return "side"
+
+    def gap(a: int, b: int) -> float:
+        pa, pb = sk.points[a], sk.points[b]
+        return abs(pa[0] - pb[0]) / height if pa is not None and pb is not None else 0.0
+    return "34" if gap(RSHO, LSHO) > 0.07 or gap(RHIP, LHIP) > 0.05 else "side"
 
 
 def _skeleton(points: list) -> Skeleton:
@@ -123,6 +142,8 @@ class Slot:
     candidate_preview: Path | None = None
     swing: dict = field(default_factory=dict)    # rig frames: the hanging parts' angles in this frame
     open_hands: tuple = ()
+    front: tuple = ()                # meshes in front of the body in this frame (3/4 view)
+    back: tuple = ()
 
 
 class Session:
@@ -195,12 +216,19 @@ class Session:
             skel = view.mirrored(placement.image.width) if placement.mirrored else view
             skel_source, confirmed = "saved", True
         assert skel is not None
+        if saved is not None and saved.get("angle") in ANGLES:
+            angle, angle_source = saved["angle"], "saved"
+        elif self.character is not None and self.character.key == key and self.character.angle_source == "owner":
+            angle, angle_source = self.character.angle, "owner"    # the same image again (facing flipped)
+        else:
+            angle, angle_source = guess_angle(skel), "detected"
         view_image = self.temp / f"skeleton_view_{uuid.uuid4().hex[:8]}.png"
         save_png(placement.image.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if placement.mirrored
                  else placement.image, view_image)
         with self._lock:
             self.character = Character(ch_in, placement, skel, facing, source,
-                                       name or Path(path).stem, key, skel_source, confirmed, view_image)
+                                       name or Path(path).stem, key, skel_source, confirmed, view_image,
+                                       angle, angle_source)
             self.background = pick_background_colour(placement.image)
             self._reset_frames()
             self.template = None
@@ -238,10 +266,29 @@ class Session:
             self._reset_frames()
             self.template = None
             self.rig = None
+        self._save_skeleton(ch)
+        self._load_rig()                # a rig drawn for this very skeleton (the owner confirmed it unchanged)
+        return ch
+
+    def _save_skeleton(self, ch: Character) -> None:
         self.skeleton_dir.mkdir(parents=True, exist_ok=True)
         with open(self.skeleton_dir / f"{ch.key}.json", "w", encoding="utf-8") as f:
-            json.dump({"facing": ch.facing, "points": view.to_json()}, f, ensure_ascii=False)
-        self._load_rig()                # a rig drawn for this very skeleton (the owner confirmed it unchanged)
+            json.dump({"facing": ch.facing, "angle": ch.angle, "points": ch.view_points()}, f, ensure_ascii=False)
+
+    def set_angle(self, angle: str) -> Character:
+        """The owner's choice of the character's angle: the pose set every animation is made from (owner,
+        2026-10-31). Kept with the confirmed skeleton; the frames made in the other angle are dropped."""
+        ch = self.character
+        if ch is None:
+            raise AppError("no_character")
+        if angle not in ANGLES:
+            raise AppError("bad_request")
+        with self._lock:
+            ch.angle, ch.angle_source = angle, "owner"
+            self._reset_frames()
+            self.template = None
+        if ch.skeleton_confirmed:
+            self._save_skeleton(ch)
         return ch
 
     def _load_skeleton(self, key: str) -> dict | None:
@@ -707,7 +754,7 @@ class Session:
         if not known[animation_id][4]:
             raise AppError("animation_not_ready")
         try:
-            template = load_template(animation_id)
+            template = load_template(animation_id, angle=self.character.angle)
         except FileNotFoundError as exc:
             raise AppError("animation_not_ready") from exc
         return template
@@ -736,6 +783,7 @@ class Session:
                 self.slots[i].skeleton = fit_frame(tf.skeleton, template.rest, self.props, ch.placement.anchor,
                                                    tf.grounded)
                 self.slots[i].open_hands = tf.open_hands
+                self.slots[i].front, self.slots[i].back = tf.front, tf.back
             if self.rig is not None:
                 # The hanging parts swing over the whole animation, so their angles are worked out for all frames.
                 swings = self.rig.rig.swings([s.skeleton for s in self.slots], loop=template.animation in LOOPING)
@@ -864,7 +912,8 @@ class Session:
         """One frame from the rig, with the finishing pass when it was asked for. Placed by the template already."""
         ch, state = self.character, self.rig
         assert ch is not None and state is not None and slot.skeleton is not None
-        image, keep = state.rig.render_keep(slot.skeleton, slot.swing, slot.open_hands, ch.placement.anchor[1])
+        image, keep = state.rig.render_keep(slot.skeleton, slot.swing, slot.open_hands, ch.placement.anchor[1],
+                                            slot.front, slot.back)
         if not self.finished:
             return image
         return finish_frame(self.engine, image, keep, ch.placement.image, ch.skeleton, slot.skeleton,

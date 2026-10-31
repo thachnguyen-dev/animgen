@@ -13,9 +13,14 @@ File format (``template_data/<id>.json``)::
         {"points": [18 points], "contact": "ground" | "air",
          "weapon": {"hand": "r" | "l", "angle": 0.0, "layer": "front" | "behind", "stage": 1},   # grip != never
          "weapon2": {...},                         # optional, dual wielding: the other hand's weapon, same format
-         "open": ["l"]}                            # optional: hands drawn as an open palm, others are fists
+         "open": ["l"],                            # optional: hands drawn as an open palm, others are fists
+         "front": ["arm_far", "leg_far"],          # optional (3/4 view): far limbs drawn in front of the body / near leg
+         "back": ["arm"]}                          # optional (3/4 view): the near arm drawn behind the body
       ]
     }
+
+Two pose sets (owner, 2026-10-31): the side view (``template_data/``) and the three-quarter view
+(``template_data/view34/``, authoring34.py), chosen by the character's angle.
 
 Template units: height of the rest pose is about 1.0, the ground anchor is (0, 0), y points down.
 Weapon angle: degrees in image space (x right, y down), 0 = pointing right, 90 = pointing down.
@@ -33,6 +38,13 @@ from . import config
 from .skeleton import N, Skeleton
 
 TEMPLATE_DIR = Path(__file__).parent / "template_data"
+ANGLES = ("side", "34")         # the character drawn from the side, or turned three-quarters toward the viewer
+FRONT_MESHES = ("arm_far", "leg_far")
+BACK_MESHES = ("arm",)
+
+
+def template_dir(angle: str = "side") -> Path:
+    return TEMPLATE_DIR / "view34" if angle == "34" else TEMPLATE_DIR
 
 WEAPON_KINDS = ("one_handed", "two_handed", "polearm", "bow", "staff")
 
@@ -80,6 +92,8 @@ class TemplateFrame:
     weapon: WeaponPose | None
     open_hands: tuple[str, ...] = ()    # "r" near, "l" far: drawn as an open palm in this frame
     weapon2: WeaponPose | None = None   # dual wielding: the other hand's weapon
+    front: tuple[str, ...] = ()         # meshes drawn in front of the body in this frame (3/4 view)
+    back: tuple[str, ...] = ()          # meshes drawn behind the body in this frame (3/4 view)
 
 
 @dataclass
@@ -159,8 +173,12 @@ def parse_template(data: dict) -> MotionTemplate:
         open_hands = fr.get("open", [])
         if not isinstance(open_hands, list) or not set(open_hands) <= {"r", "l"}:
             raise TemplateError(f"{tid} frame {i + 1}: open is a list of \"r\" and \"l\"")
+        front, back = fr.get("front", []), fr.get("back", [])
+        if not isinstance(front, list) or not set(front) <= set(FRONT_MESHES) \
+                or not isinstance(back, list) or not set(back) <= set(BACK_MESHES):
+            raise TemplateError(f"{tid} frame {i + 1}: bad front/back meshes")
         frames.append(TemplateFrame(skeleton=sk, grounded=(contact == "ground"), weapon=wp,
-                                    open_hands=tuple(open_hands), weapon2=wp2))
+                                    open_hands=tuple(open_hands), weapon2=wp2, front=tuple(front), back=tuple(back)))
     return MotionTemplate(
         id=tid, animation=str(data.get("animation", tid)), variant=data.get("variant"),
         name_vi=str(data.get("name_vi", tid)), status=str(data.get("status", "Proposed")),
@@ -168,8 +186,8 @@ def parse_template(data: dict) -> MotionTemplate:
         rest=_parse_points(data.get("rest"), f"{tid} rest"), frames=frames)
 
 
-def load_template(tid: str, directory: Path = TEMPLATE_DIR) -> MotionTemplate:
-    path = directory / f"{tid}.json"
+def load_template(tid: str, directory: Path | None = None, angle: str = "side") -> MotionTemplate:
+    path = (directory or template_dir(angle)) / f"{tid}.json"
     with open(path, encoding="utf-8") as f:
         return parse_template(json.load(f))
 

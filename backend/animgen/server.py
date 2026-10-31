@@ -12,6 +12,7 @@ Routes (all JSON):
   GET  /animations                     -> [{id, name_vi, ready, grip, weapon_kinds, status}]
   GET  /state                          -> session state (frames, previews, candidates, ...)
   POST /character {path, facing?, name?}
+  POST /character/angle {angle}       -> {character, state}  ("side" | "34": which pose set the character uses)
   POST /character/skeleton {points}
   POST /rig {seed?, part?}             -> {task}   (the part map from the owner's image and the AI's open hand;
                                         part 'parts': the parts found again, 'hand': the hand drawn again)
@@ -105,6 +106,9 @@ class App:
                 return 200, {"character": ch.to_json(), "state": s.state()}
             if parts == ["character", "skeleton"]:
                 ch = s.confirm_skeleton(_req(body, "points", list))
+                return 200, {"character": ch.to_json(), "state": s.state()}
+            if parts == ["character", "angle"]:
+                ch = s.set_angle(_req(body, "angle", str))
                 return 200, {"character": ch.to_json(), "state": s.state()}
             if parts == ["rig"]:
                 if s.character is None:

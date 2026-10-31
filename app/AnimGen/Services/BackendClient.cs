@@ -43,6 +43,10 @@ public sealed class BackendClient : IDisposable
     public Task<CharacterReply> SetCharacterAsync(string path, string? facing, string? name) =>
         PostAsync<CharacterReply>("character", new { path, facing, name });
 
+    /// <summary>"side" or "34": the pose set the character's animations are made from.</summary>
+    public Task<CharacterReply> SetAngleAsync(string angle) =>
+        PostAsync<CharacterReply>("character/angle", new { angle });
+
     public Task<CharacterReply> ConfirmSkeletonAsync(IEnumerable<double[]?> points) =>
         PostAsync<CharacterReply>("character/skeleton", new { points = points.ToArray() });
 

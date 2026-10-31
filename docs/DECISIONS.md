@@ -360,6 +360,27 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   into the torso on the map, the kind of mistake the map stage exists for.
 - The pose editor (owner's option 1) stays the planned fallback for special characters.
 
+## Three-quarter view pose set (owner, 2026-10-31) — owner direction Confirmed, poses Proposed
+
+- Why: the side-view poses on a 3/4 character lose the body's width and hide the far arm (tested on a 3/4 shape
+  character); the owner chose a separate pose set over adapting the side one, and asked for it to follow common
+  3/4 animation practice.
+- Research used: 3/4 front is about 45 degrees (turnaround guides); in a walk the hips turn about 5-10 degrees with
+  the legs and the chest 3-8 degrees against them, nearly parallel at the passing pose (walk-cycle course notes);
+  a slash winds the torso one way and swings it through the other, the back foot shifting (pixel-art slash
+  tutorials); sprite packs keep idle/walk/attack/death rows with the feet on one baseline.
+- Method (authoring34.py): each side pose is lifted into 3D (its joint angles are swings in the body's forward-down
+  plane), given shoulder and hip width, turned, and projected at 45 degrees with the camera 12 degrees above. The
+  chest turns with the arm that leads, the hips with the legs (counter-turned in cycles); by hand: the kick turns
+  the hips, two-handed and bow stances turn the near shoulder back. Each frame says which limbs are nearer the
+  viewer than the body: the far arm reaching forward and the far leg stepping forward are drawn in front, the near
+  arm swung far back behind ("front"/"back" in the template; Rig.drawing_order).
+- The character's angle ("side" or "34") is guessed from the skeleton (both eyes found and the shoulders or hips
+  well apart), shown in step 1 with "Đổi góc nhìn", and saved with the confirmed skeleton.
+- Known limit: the torso is one flat layer, so a turn shows in the shoulders and limbs, not in a narrowing chest.
+- Test character: dev/tools/shape_character.py --view 34 (drawn from the same 3D body) renders all animations to
+  D:/Game/ainm/pose_test_34.
+
 ## Not done on purpose
 
 - No free-form prompts, no batch generation, no automatic quality scoring, no Unity configuration files, no
