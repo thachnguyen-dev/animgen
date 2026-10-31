@@ -31,7 +31,7 @@ MESSAGES_VI: dict[str, str] = {
     "frame_failed_after_retries": "Khung {frame} vẫn lỗi sau {tries} lần thử. Bạn có thể tạo lại khung này.",
     "cancelled": "Đã huỷ.",
     "rig_missing": "Hãy tạo khung nhân vật (bước 2) trước khi tạo hoạt ảnh.",
-    "rig_failed": "Không dựng được khung nhân vật từ bản vẽ này. Hãy vẽ lại.",
+    "rig_failed": "Không dựng được khung nhân vật từ các bộ phận này. Hãy bấm “Tách lại”.",
     "unknown_part": "Không có phần này trên nhân vật.",
     "rig_edit_missing": "Chưa có tệp Photoshop các bộ phận. Hãy bấm “Sửa trong Photoshop” trước.",
     "rig_edit_unreadable": "Không đọc được tệp Photoshop đã sửa. Hãy lưu lại dạng PSD (Lưu, không phải Xuất).",
@@ -39,7 +39,8 @@ MESSAGES_VI: dict[str, str] = {
     "rig_edit_failed": "Không dựng được khung nhân vật từ tệp đã sửa nên đã giữ các bộ phận cũ. "
                        "Hãy giữ tên các lớp, giữ lớp “Thân”, và giữ tay chân ở chỗ cũ.",
     "rig_layers_missing": "Khung nhân vật này làm bằng bản cũ, chưa có các bộ phận riêng. "
-                          "Hãy bấm “Vẽ lại cả hai hình” để tạo.",
+                          "Hãy bấm “Làm lại khung nhân vật” để tạo.",
+    "rig_map_missing": "Không còn bản đồ bộ phận của nhân vật này. Hãy bấm “Tách lại” để tách các bộ phận lần nữa.",
     "rig_psd_busy": "Không ghi được tệp Photoshop các bộ phận. Hãy đóng tệp đó trong Photoshop rồi thử lại.",
     "nothing_to_redraw": "Khung hình làm từ khung nhân vật luôn giống nhau; chỉ bản hoàn thiện bằng AI mới vẽ lại được.",
     "no_frames": "Chưa có khung hình nào.",

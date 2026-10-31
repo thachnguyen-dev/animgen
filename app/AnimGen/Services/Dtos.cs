@@ -109,7 +109,8 @@ public sealed class RigInfo
     public string? HandView { get; set; }               // the open-hand drawing
     public List<HangingInfo> Hanging { get; set; } = new();
     public List<string> Editing { get; set; } = new();  // "parts" while the Photoshop file is out for the owner
-    public string? Psd { get; set; }                    // the Photoshop file of the body parts (null: an older rig)
+    public string? Psd { get; set; }                    // the Photoshop file of the stage (null: an older rig)
+    public string? Stage { get; set; }                  // "map" (parts as found), "parts" (hidden painted), null: older
 }
 
 /// <summary>The Photoshop file of the body parts, for the owner to correct.</summary>

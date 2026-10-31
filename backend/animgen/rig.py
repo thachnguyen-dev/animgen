@@ -441,16 +441,22 @@ SETTLE_MOVE = 0.03        # …and whose pivot ends this close (of the figure he
 HANG_TOP = 0.05           # of a hanging layer's length: its pivot is the middle of its pixels this close to its top
 
 
-def build_rig_from_layers(layers: dict[str, np.ndarray], bind_sk: Skeleton) -> Rig:
+def build_rig_from_layers(layers: dict[str, np.ndarray], bind_sk: Skeleton, order: list | None = None) -> Rig:
     """The rig from the owner's layers (canvas-sized RGBA in the bind pose, facing right). Every part is the layer as
-    it is: a cape, a skirt or long hair is its own mesh and swings as a whole, so nothing of it moves with a limb."""
+    it is: a cape, a skirt or long hair is its own mesh and swings as a whole, so nothing of it moves with a limb.
+    ``order``: the parts back to front as the owner left them in the Photoshop file; a mesh is drawn where its first
+    part is (a cape moved in front of the near arm wraps over it)."""
     bind = {k: v for k, v in _target_bones(bind_sk).items() if v[0] is not None and v[1] is not None}
     size = next(iter(layers.values())).shape[:2]
     h, w = size
     figure = _figure_height(bind_sk)
     blend = JOINT_BLEND * figure
+    groups = list(LAYER_GROUPS)
+    if order:
+        where = {name: k for k, name in enumerate(order)}
+        groups.sort(key=lambda g: min((where[p] for p, _ in g[1] if p in where), default=len(where)))
     meshes = []
-    for name, drawn, hangs in LAYER_GROUPS:
+    for name, drawn, hangs in groups:
         variants = [(drawn, layers, False)]
         if name in ("arm", "arm_far") and "open_hand" in layers:
             variants.append((drawn, _open_layers(layers, bind, far=name == "arm_far"), True))

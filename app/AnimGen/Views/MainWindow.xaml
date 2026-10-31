@@ -158,24 +158,27 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Step 2: the character's rig, drawn once by the AI; every frame is made from it -->
+                    <!-- Step 2: the character's rig, cut from the owner's own image; every frame is made from it -->
                     <Border Style="{StaticResource Panel}">
                         <StackPanel>
                             <TextBlock Style="{StaticResource TextTitle}" Text="2. Khung nhân vật"/>
                             <Button Content="{Binding RigButtonText}" Command="{Binding MakeRigCommand}" HorizontalAlignment="Left"/>
-                            <!-- Each drawing is redrawn on its own; the parts are corrected in Photoshop, one layer each (owner, 2026-10-31) -->
+                            <!-- Two stages (owner, 2026-10-31): the part map is corrected first, then the AI paints what each part hides -->
                             <UniformGrid Columns="2" Visibility="{Binding HasRig, Converter={StaticResource BoolToVis}}">
                                 <StackPanel Margin="{StaticResource SpaceRight}">
                                     <Border Background="{StaticResource BrushChecker}" Height="{StaticResource SizeThumb}"
                                             BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}">
                                         <Image Source="{Binding RigImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
-                                               AutomationProperties.Name="Khung nhân vật"/>
+                                               AutomationProperties.Name="{Binding RigImageName}"/>
                                     </Border>
-                                    <TextBlock Style="{StaticResource TextMuted}"
-                                               Text="Nhân vật ghép từ các bộ phận riêng. Đầu luôn lấy từ ảnh của bạn."/>
+                                    <TextBlock Style="{StaticResource TextMuted}" Text="{Binding RigCaption}"/>
                                     <StackPanel Orientation="Horizontal" Margin="{StaticResource SpaceGap}">
-                                        <Button Content="Vẽ lại" Command="{Binding RedrawRigPartCommand}" CommandParameter="rig"
-                                                Padding="8,4"/>
+                                        <Button Content="Tách lại" Command="{Binding RedrawRigPartCommand}" CommandParameter="parts"
+                                                AutomationProperties.Name="Tách lại các bộ phận" Padding="8,4"
+                                                Visibility="{Binding CanSplitAgain, Converter={StaticResource BoolToVis}}"/>
+                                        <Button Content="Về bản đồ" Command="{Binding BackToMapCommand}"
+                                                AutomationProperties.Name="Về bản đồ bộ phận" Padding="8,4"
+                                                Visibility="{Binding IsPartsStage, Converter={StaticResource BoolToVis}}"/>
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel>
@@ -201,6 +204,9 @@
                                         AutomationProperties.Name="Nạp lại từ Photoshop"
                                         Visibility="{Binding IsEditingRig, Converter={StaticResource BoolToVis}}"/>
                             </StackPanel>
+                            <Button Style="{StaticResource ButtonPrimary}" Content="Vẽ phần bị che" Command="{Binding RebuildRigCommand}"
+                                    HorizontalAlignment="Stretch"
+                                    Visibility="{Binding IsMapStage, Converter={StaticResource BoolToVis}}"/>
                             <ItemsControl ItemsSource="{Binding HangingParts}"
                                           Visibility="{Binding HasHanging, Converter={StaticResource BoolToVis}}">
                                 <ItemsControl.ItemTemplate>

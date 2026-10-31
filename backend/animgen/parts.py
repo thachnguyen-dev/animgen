@@ -1,5 +1,6 @@
-"""Body-part layers of the character (owner, 2026-10-31): one reference image (the rig image, rig.py) and a group of
-separate body parts made from it, which the owner can correct in Photoshop before any frame is made.
+"""Body-part layers of the character (owner, 2026-10-31): one reference image (the owner's own character image, as
+placed on the canvas) and a group of separate body parts made from it, which the owner corrects in Photoshop before
+any frame is made.
 
 - The parts are cut from the reference by what is drawn, not by distance to the bones: Segment Anything 2 follows
   the outlines (a pauldron goes with the upper arm, a gauntlet with the forearm), and a clothes-parsing model says
@@ -7,19 +8,24 @@ separate body parts made from it, which the owner can correct in Photoshop befor
   goes with an arm or a leg (owner: "many applications put them with the limbs, and they move with the limbs").
   Garments left over become their own parts by where they hang from: the back (cape), the hips (skirt), behind the
   head (long hair).
-- The joints are read on the reference itself: the AI does not draw the far limbs exactly where it was asked to. The
-  pose reader can swap left and right, so the arm and the leg further forward are taken as the near ones (the spread
-  pose has them forward).
+- The joints are the owner's confirmed skeleton (``bind_skeleton`` reads them on an AI drawing instead, for rigs
+  drawn in a spread pose before 2026-10-31).
 - What a part hides is rebuilt by the AI (owner: "keep the visible portion, have the AI reconstruct the missing
   section"): the part's expected outline (a capsule along its bones as wide as the part is drawn) minus what shows of
   it, within the figure, is repainted with the whole character as context, starting from a guess: the near limb moved
   onto a far limb's bones (darker), or the part's own colours spread in.
-- The head comes from the owner's own image (the face never drifts); the torso from the reference, where the arms are
-  spread away from it (in the owner's image the near arm hangs over it).
+- The head is cut level at the neck, so the face never comes apart from itself.
 
 The layers are canvas-sized RGBA in the bind pose (the reference's), facing right. ``write_psd`` and ``read_psd`` turn
-them into one Photoshop file facing as the owner's character: the reference at the bottom as a guide, then the group
-"Bộ phận" with one named layer per part, back to front.
+them into one Photoshop file facing as the owner's character: the reference at the bottom as a guide, then the parts
+in groups by kind (limbs, accessories, body, head), back to front.
+
+Two Photoshop files per character (owner, 2026-10-31: correct the split before the AI spends time on it):
+- the part map: each part as cut from the reference, nothing repainted; the owner moves pixels between layers and
+  reorders them; a hidden colour layer shows the split at a glance;
+- the parts: the same layers with the hidden sections rebuilt (``rebuild``), for the last touches.
+The order the owner leaves the layers in is the order the parts are drawn in (a cape wrapping the front, an arm
+behind it).
 """
 
 from __future__ import annotations
@@ -55,7 +61,25 @@ LAYERS = (
 NAMES = [n for n, _ in LAYERS]
 LABELS = dict(LAYERS)
 GUIDE = "Hình mẫu (chỉ để xem)"
-GROUP = "Bộ phận"
+OVERLAY = "Màu từng bộ phận (chỉ để xem)"
+# The groups of the Photoshop files, back to front, and the parts in each by default.
+GROUPS = (
+    ("Phụ kiện phía sau", ("cape",)),
+    ("Tay chân phía xa", ("far_arm_upper", "far_arm_lower", "far_leg_upper", "far_leg_lower")),
+    ("Chân phía gần", ("leg_upper", "leg_lower")),
+    ("Thân", ("torso",)),
+    ("Phụ kiện phía trước", ("skirt",)),
+    ("Đầu", ("head", "hair")),
+    ("Tay phía gần", ("arm_upper", "arm_lower", "open_hand")),
+)
+DEFAULT_ORDER = [(g, n) for g, names in GROUPS for n in names]
+# A colour for each part in the map's overview (the app shows it; the Photoshop file has it as a hidden layer).
+MAP_COLOURS = {"cape": (230, 120, 0), "far_arm_upper": (120, 70, 200), "far_arm_lower": (170, 120, 255),
+               "far_leg_upper": (0, 110, 110), "far_leg_lower": (60, 190, 190), "leg_upper": (0, 150, 40),
+               "leg_lower": (120, 220, 60), "torso": (220, 30, 40), "skirt": (0, 120, 255), "head": (255, 220, 0),
+               "hair": (200, 0, 200), "arm_upper": (140, 60, 20), "arm_lower": (240, 150, 110),
+               "open_hand": (255, 255, 255)}
+MAP_TINT = 0.6            # how strongly the overview colours the parts
 HIDDEN_IN_PSD = ("open_hand",)        # drawn only in the frames that open the hand
 BONES = {"far_arm_upper": "uarm_far", "far_arm_lower": "larm_far", "far_leg_upper": "uleg_far",
          "far_leg_lower": "lleg_far", "leg_upper": "uleg", "leg_lower": "lleg", "arm_upper": "uarm",
@@ -76,7 +100,7 @@ REBUILD_STRENGTH = 0.75   # how much of the guess the AI repaints
 BACKGROUND_NEAR = 24      # RGB: a repainted pixel this close to the background colour is left out
 TORSO_SLACK = 1.15        # the body hidden behind the near arm is at most this much wider than the torso drawn
 FAR_GUESS = 0.85          # a far limb guessed from the near one is this much darker
-REBUILD_PROMPT = "standing, wide stride, legs apart, one arm forward, one arm back, clenched fists"
+REBUILD_PROMPT = "standing, clenched fists"
 LEG_LABELS = ("Pants", "Left-leg", "Right-leg", "Left-shoe", "Right-shoe")
 GARMENT_LABELS = ("Upper-clothes", "Skirt", "Dress", "Scarf", "Belt")
 
@@ -293,7 +317,9 @@ def _cut_by_bones(alpha: np.ndarray, sk: Skeleton) -> dict[str, np.ndarray]:
     ys, xs = np.mgrid[0:h, 0:w].astype(np.float32)
     bones = {k: v for k, v in _target_bones(sk).items() if v[0] is not None and v[1] is not None}
     names = list(bones)
-    weight = {"torso": 0.55, "head": 0.6}
+    # The near limbs are in front: where a near and a far bone are as close, the pixels are the near limb's (the
+    # owner's standing image has the far arm and leg behind the near ones).
+    weight = {"torso": 0.55, "head": 0.6, "uarm_far": 1.4, "larm_far": 1.4, "uleg_far": 1.4, "lleg_far": 1.4}
     d = np.stack([_segment_distance(xs, ys, *bones[n]) * weight.get(n, 1.0) for n in names])
     nearest = d.argmin(0)
     by_bone = {n: alpha & (nearest == i) for i, n in enumerate(names)}
@@ -313,12 +339,16 @@ def _figure(sk: Skeleton) -> float:
 # ------------------------------------------------------------------------------------------------------------------
 def rebuild(engine: Engine, image: Image.Image, parts: dict[str, np.ndarray], sk: Skeleton, reference: Image.Image,
             reference_sk: Skeleton, background: tuple[int, int, int], seed: int,
-            progress=None) -> dict[str, np.ndarray]:
-    """Every part as a whole layer: its own pixels from the reference, its hidden section repainted by the AI."""
+            progress=None, start: dict[str, np.ndarray] | None = None) -> dict[str, np.ndarray]:
+    """Every part as a whole layer: its own pixels from the reference (or ``start``, the part map's layers as the
+    owner left them), its hidden section repainted by the AI."""
     arr = np.array(image.convert("RGBA"))
     alpha = arr[..., 3] > 127
     total = float(alpha.sum())
-    layers = {n: np.where(m[..., None], arr, 0).astype(np.uint8) for n, m in parts.items()}
+    if start is not None:
+        layers = {n: v.copy() for n, v in start.items()}
+    else:
+        layers = {n: np.where(m[..., None], arr, 0).astype(np.uint8) for n, m in parts.items()}
     jobs = _rebuild_jobs(arr, alpha, parts, sk)
     jobs = [j for j in jobs if j[1].sum() >= MIN_HIDDEN * total]
     for k, (names, hidden, guess) in enumerate(jobs):
@@ -442,9 +472,38 @@ def _nearest_part(names: tuple, sk: Skeleton, region: np.ndarray) -> np.ndarray:
 # ------------------------------------------------------------------------------------------------------------------
 # Photoshop file
 # ------------------------------------------------------------------------------------------------------------------
-def write_psd(path: Path, guide: Image.Image, layers: dict[str, np.ndarray], mirrored: bool) -> None:
-    """One Photoshop file: the reference at the bottom (a guide), then the parts group, back to front, cropped to
-    their pixels. ``mirrored``: the owner's character faces left, so the file does too."""
+def full_order(order: list | None, layers) -> list[tuple[str, str]]:
+    """(group, part) back to front for every part in ``layers``: the owner's order, then parts it does not have (a
+    new open hand) where they are by default."""
+    out = [(g, n) for g, n in (order or []) if n in layers]
+    have = {n for _, n in out}
+    for g, n in DEFAULT_ORDER:
+        if n in layers and n not in have:
+            later = [k for k, (_, m) in enumerate(out) if NAMES.index(m) > NAMES.index(n)]
+            out.insert(later[0] if later else len(out), (g, n))
+    return out
+
+
+def map_view(layers: dict[str, np.ndarray], order: list | None = None, tint: float = MAP_TINT) -> np.ndarray:
+    """The layers drawn back to front, each tinted in its colour (the part map at a glance; ``tint`` 0: as drawn)."""
+    h, w = next(iter(layers.values())).shape[:2]
+    out = np.zeros((h, w, 4), np.uint8)
+    for _, name in full_order(order, layers):
+        if name in HIDDEN_IN_PSD:
+            continue
+        p = layers[name].astype(np.float32)
+        p[..., :3] = p[..., :3] * (1 - tint) + np.array(MAP_COLOURS[name], np.float32) * tint
+        k = p[..., 3:4] / 255
+        out[..., :3] = (p[..., :3] * k + out[..., :3] * (1 - k)).astype(np.uint8)
+        out[..., 3] = np.maximum(out[..., 3], layers[name][..., 3])
+    return out
+
+
+def write_psd(path: Path, guide: Image.Image, layers: dict[str, np.ndarray], mirrored: bool,
+              order: list | None = None, overlay: bool = False) -> None:
+    """One Photoshop file: the reference at the bottom (a guide), then the parts in their groups, back to front
+    (``order``: (group, part) as the owner left them), cropped to their pixels. ``overlay``: a hidden layer on top
+    colours each part (the part map). ``mirrored``: the owner's character faces left, so the file does too."""
     from psd_tools import PSDImage
     from psd_tools.api.layers import Group, PixelLayer
 
@@ -454,18 +513,23 @@ def write_psd(path: Path, guide: Image.Image, layers: dict[str, np.ndarray], mir
     psd = PSDImage.new("RGBA", guide.size)
     g = PixelLayer.frompil(own_facing(guide.convert("RGBA")), psd, "guide", 0, 0)
     g.name = GUIDE
-    group = Group.new(psd, "parts", True)
-    group.name = GROUP
-    for name in NAMES:
-        if name not in layers:
-            continue
+    group, group_name = None, None
+    for gname, name in full_order(order, layers):
         img = own_facing(Image.fromarray(layers[name], "RGBA"))
         box = img.getchannel("A").getbbox()
         if box is None:
             continue
+        if gname != group_name:              # a part moved out of its group starts a group of that name again
+            group, group_name = Group.new(psd, "group", True), gname
+            group.name = gname or "Bộ phận"
         layer = PixelLayer.frompil(img.crop(box), group, name, box[1], box[0])
         layer.name = LABELS[name]
         layer.visible = name not in HIDDEN_IN_PSD
+    if overlay:
+        tint = own_facing(Image.fromarray(map_view(layers, order), "RGBA"))
+        top = PixelLayer.frompil(tint, psd, "overlay", 0, 0)
+        top.name = OVERLAY
+        top.visible = False
     # Old programs read the short name in a Mac character set; Photoshop shows the Unicode name set above.
     for record in psd._record.layer_and_mask_information.layer_info.layer_records:
         record.name = record.name.encode("ascii", "replace").decode("ascii")
@@ -475,19 +539,20 @@ def write_psd(path: Path, guide: Image.Image, layers: dict[str, np.ndarray], mir
     tmp.replace(path)
 
 
-def read_psd(path: Path, size: tuple[int, int], mirrored: bool) -> dict[str, np.ndarray]:
+def read_psd(path: Path, size: tuple[int, int], mirrored: bool) -> tuple[dict[str, np.ndarray], list]:
     """The part layers of a Photoshop file written by ``write_psd`` (and edited by the owner), back in the bind
-    pose facing right. Layers are found by name anywhere in the file; a part whose layer is gone or empty is left
-    out. Raises ValueError when the file cannot be read."""
+    pose facing right, and their order back to front as (group, part). Layers are found by name anywhere in the
+    file; a part whose layer is gone or empty is left out. Raises ValueError when the file cannot be read."""
     from psd_tools import PSDImage
     psd = PSDImage.open(str(path))
     if tuple(psd.size) != tuple(size):
         raise ValueError("size")
     by_label = {label: name for name, label in LAYERS}
     out: dict[str, np.ndarray] = {}
-    for layer in psd.descendants():
+    order: list = []
+    for layer in psd.descendants():         # bottom to top
         name = by_label.get(layer.name)
-        if name is None or layer.is_group():
+        if name is None or layer.is_group() or name in out:
             continue
         img = layer.topil()
         if img is None:
@@ -499,7 +564,9 @@ def read_psd(path: Path, size: tuple[int, int], mirrored: bool) -> dict[str, np.
         arr = np.array(canvas)
         if (arr[..., 3] > 0).any():
             out[name] = arr
-    return out
+            parent = layer.parent
+            order.append((parent.name if parent is not None and parent is not psd else "", name))
+    return out, order
 
 
 def save_layers(folder: Path, layers: dict[str, np.ndarray]) -> None:

@@ -13,9 +13,11 @@ Routes (all JSON):
   GET  /state                          -> session state (frames, previews, candidates, ...)
   POST /character {path, facing?, name?}
   POST /character/skeleton {points}
-  POST /rig {seed?, part?}             -> {task}   (the AI draws the character's rig and hand images;
-                                        part 'rig' or 'hand': only that one)
-  POST /rig/edit                       -> {file, state}  (the Photoshop file of the body parts, to correct)
+  POST /rig {seed?, part?}             -> {task}   (the part map from the owner's image and the AI's open hand;
+                                        part 'parts': the parts found again, 'hand': the hand drawn again)
+  POST /rig/rebuild                    -> {task}   (the AI paints what each part of the part map hides)
+  POST /rig/map                        -> state    (back to the part map, the painted parts dropped)
+  POST /rig/edit                       -> {file, state}  (the Photoshop file of the stage, to correct)
   POST /rig/reload                     -> state    (the rig rebuilt from the saved Photoshop file)
   POST /rig/hanging {name, on: bool}   -> state    (a cape, skirt or hair swings or stays as drawn)
   POST /generate {animation, grip?: bool, seed?, finish?: bool} -> {task}
@@ -111,13 +113,22 @@ class App:
                     raise AppError("skeleton_unconfirmed")
                 seed = body.get("seed")
                 part = body.get("part")
-                if part not in (None, "rig", "hand"):
+                if part not in (None, "parts", "hand"):
                     raise AppError("unknown_part")
                 if part is not None and s.rig is None:
                     raise AppError("rig_missing")
                 t = self.runner.start("rig", lambda task: s.make_rig(task, int(seed) if seed is not None else None,
                                                                      part))
                 return 200, {"task": t.to_json()}
+            if parts == ["rig", "rebuild"]:
+                if s.rig is None:
+                    raise AppError("rig_missing")
+                if s.rig.stage != "map":
+                    raise AppError("rig_map_missing")
+                t = self.runner.start("rig", s.rebuild_hidden)
+                return 200, {"task": t.to_json()}
+            if parts == ["rig", "map"]:
+                return 200, s.back_to_map()
             if parts == ["rig", "edit"]:
                 return 200, s.rig_edit_file()
             if parts == ["rig", "reload"]:

@@ -6,13 +6,14 @@ and every finished frame is mirrored back on the way out, so the owner always ge
 The app draws characters without weapons (owner, 2026-10-30): the owner attaches weapons in the game. Animations
 made for a weapon draw the hands closed, and the export says where the weapon hand is in every frame.
 
-Frames come from the character's rig (owner, 2026-10-30, DECISIONS.md "Layered cut-out character"): after the
-skeleton, the AI draws the character once in a spread pose and once with an open hand (``make_rig``); every frame
-is then those pieces bent onto the template (rig.py), in seconds, optionally repainted lightly (finish.py). The rig
-is saved by image content like the skeleton, and used while its skeleton is the confirmed one.
+Frames come from the character's rig (owner, 2026-10-30, DECISIONS.md "Layered cut-out character"): every frame
+is the character's body-part layers bent onto the template (rig.py), in seconds, optionally repainted lightly
+(finish.py). The rig is saved by image content like the skeleton, and used while its skeleton is the confirmed one.
 
-The pieces are body-part layers (owner, 2026-10-31, parts.py): found in the spread-pose drawing, what each hides
-rebuilt by the AI, saved as one Photoshop file the owner can correct; the rig is rebuilt from it when it is saved.
+The layers come from the owner's own image (owner, 2026-10-31, parts.py; no redrawing of the whole character): the
+parts are found on it and given to the owner as the part map, a Photoshop file to correct; then the AI paints what
+each part hides, and the parts go to a second Photoshop file for the last touches. Either file rebuilds the rig when
+it is saved. The AI draws only an open hand, for the frames that open it.
 """
 
 from __future__ import annotations
@@ -40,7 +41,8 @@ from .errors import AppError
 from .frames import Placement, clean_alpha, fit_to_canvas, place_reference, validate_image
 from .imaging import pick_background_colour, save_png
 from .inputs import CharacterInput, check_character
-from .skeleton import LANK, LHIP, NECK, RANK, RHIP, Proportions, Skeleton, fit_frame, hand_point, measure
+from .skeleton import (LANK, LELB, LHIP, LKNE, LSHO, LWRI, NECK, RANK, RELB, RHIP, RKNE, RSHO, RWRI, Proportions,
+                       Skeleton, fit_frame, hand_point, measure)
 from .tasks import Task
 from .templates import MotionTemplate, load_template, ANIMATIONS
 from . import export as export_mod
@@ -74,9 +76,8 @@ class Character:
 
 # The rig drawings (rig_proto.py prototype, 2026-10-30): the spread pose keeps every limb clear of the others; the
 # hand image has the near arm straight forward with an open palm.
+# The spread pose rigs were drawn in before 2026-10-31 (they still load).
 RIG_POSE = Pose(spine=2, head=0, r_sh=40, r_el=20, l_sh=-40, l_el=20, r_hip=28, r_knee=6, l_hip=-26, l_knee=10)
-RIG_PROMPT = "standing, wide stride, legs apart, one arm forward, one arm back, clenched fists"
-RIG_STRENGTH = 0.6
 HAND_POSE = Pose(spine=2, head=0, r_sh=90, r_el=0, l_sh=-40, l_el=20, r_hip=28, r_knee=6, l_hip=-26, l_knee=10)
 HAND_PROMPT = "standing, arm outstretched forward, open palm, fingers spread"
 HAND_STRENGTH = 0.75
@@ -86,6 +87,9 @@ HANGING_TINT = {"cape": (255, 140, 0), "skirt": (0, 160, 255), "hair": (200, 0, 
 LAYERS_DIR = "layers"
 LAYERS_INFO = "layers.json"
 PSD_FILE = "parts.psd"
+MAP_DIR = "map"
+MAP_FILE = "map.psd"
+FAR_BEHIND = 0.02         # of the figure height: a far limb the owner did not place is this far behind the near one
 EDIT_MIN_DRAWN = 0.25     # the edited layers keep at least this share of the drawn pixels
 
 
@@ -102,7 +106,8 @@ class RigState:
     hand_view: Path | None = None                # the hand image, own facing
     editing: list = field(default_factory=list)  # "parts" while the Photoshop file is out for the owner
     pose: Skeleton | None = None                 # the bind pose the view is drawn in
-    psd: Path | None = None                      # the Photoshop file of the layers (None: an older rig without)
+    psd: Path | None = None                      # the Photoshop file of the stage (None: an older rig without)
+    stage: str | None = None                     # "map" (parts as found), "parts" (hidden sections painted), None: old
 
 
 @dataclass
@@ -266,7 +271,8 @@ class Session:
     # Rig
     # ------------------------------------------------------------------------------------------------------------
     def _rig_skeletons(self) -> tuple[Skeleton, Skeleton]:
-        """The spread pose and the hand pose, fitted to the character as the templates are."""
+        """The spread pose (rigs made before 2026-10-31 were drawn in it) and the hand pose, fitted to the character
+        as the templates are."""
         ch = self.character
         assert ch is not None
         rest = load_template("idle").rest
@@ -279,53 +285,47 @@ class Session:
         return out[0], out[1]
 
     def make_rig(self, task: Task, seed: int | None = None, part: str | None = None) -> dict:
-        """The AI draws the rig image and the hand image (two drawings, about a minute each on the RTX 4060).
-        ``part`` 'rig' or 'hand': only that drawing is redrawn and the other kept (owner, 2026-10-31: a good body
-        is not thrown away to fix the hand)."""
+        """The character's rig from the owner's own image (owner, 2026-10-31: no redrawing of the whole character):
+        the AI draws only an open hand (about a minute), the parts are found on the image itself and given to the
+        owner as the part map to correct; ``rebuild_hidden`` then has the AI paint what each part hides.
+        ``part`` 'parts': the parts are found again, the hand kept; 'hand': only the hand is drawn again."""
         ch = self.character
         if ch is None:
             raise AppError("no_character")
         if self.require_confirmed_skeleton and not ch.skeleton_confirmed:
             raise AppError("skeleton_unconfirmed")
-        if part not in (None, "rig", "hand"):
+        if part not in (None, "parts", "hand"):
             raise AppError("unknown_part")
         if part is not None and self.rig is None:
             raise AppError("rig_missing")
         self._ensure_loaded(task)
         seed = seed if seed is not None else random.randint(1, 2**31 - 1)
-        rig_sk, hand_sk = self._rig_skeletons()
-        todo = [(name, sk, prompt, strength, n) for n, (name, sk, prompt, strength) in enumerate((
-            ("rig", rig_sk, RIG_PROMPT, RIG_STRENGTH), ("hand", hand_sk, HAND_PROMPT, HAND_STRENGTH)))
-            if part is None or name == part]
-        messages = {"rig": "Đang vẽ khung nhân vật", "hand": "Đang vẽ bàn tay mở"}
-        task.update(stage="generating", total=len(todo), done=0)
-        images = {}
-        for done, (name, sk, prompt, strength, n) in enumerate(todo):
-            task.check_cancel()
-            task.update(message=f"{messages[name]} ({done + 1}/{len(todo)})…")
-            req = FrameRequest(reference=ch.placement.image, reference_skeleton=ch.skeleton, target_skeleton=sk,
-                               background=self.background, prompt=prompt, seed=(seed + n) % (2**31 - 1),
-                               hands_gripping=False, extra={"strength": strength})
-            try:
-                images[name] = self.engine.remover.remove(self.engine.drawer.draw(req), self.background)
-            except EngineError as exc:
-                if exc.kind == "oom":
-                    self.engine.free_memory()
-                    raise AppError("gpu_out_of_memory") from exc
-                raise AppError("inference_failed", detail=exc.detail or exc.kind) from exc
-            task.update(done=done + 1)
         folder = self.rig_dir / ch.key
         folder.mkdir(parents=True, exist_ok=True)
+        task.update(stage="generating", total=1 if part == "parts" else 2, done=0)
+        if part != "parts":
+            _, hand_sk = self._rig_skeletons()
+            task.update(message="Đang vẽ bàn tay mở…")
+            req = FrameRequest(reference=ch.placement.image, reference_skeleton=ch.skeleton, target_skeleton=hand_sk,
+                               background=self.background, prompt=HAND_PROMPT, seed=seed % (2**31 - 1),
+                               hands_gripping=False, extra={"strength": HAND_STRENGTH})
+            try:
+                hand = self.engine.remover.remove(self.engine.drawer.draw(req), self.background)
+            except EngineError as exc:
+                raise self._engine_error(exc) from exc
+            save_png(hand, folder / "hand.png")
+            task.update(done=1)
         info = {"seed": seed, "skeleton": ch.skeleton.to_json(), "still": []}
         if part is not None:
             info = self._rig_info() or info
-            info["seed" if part == "rig" else "hand_seed"] = seed
-            if part == "rig":
-                info["still"] = []                   # the hanging parts are found again in the new drawing
-        for name, img in images.items():
-            save_png(img, folder / f"{name}.png")
+            info["hand_seed" if part == "hand" else "seed"] = seed
+            if part == "parts":
+                info["still"] = []                   # the hanging parts are found again
+        # The reference is the owner's own image, as placed on the canvas.
+        save_png(ch.placement.image, folder / "rig.png")
         self._write_rig_info(info)
-        self._make_layers(task, folder, seed, whole=part != "hand")
+        self._make_layers(task, folder, whole=part != "hand")
+        task.update(done=task.total)
         with self._lock:
             self._reset_frames()
             self.template = None
@@ -334,74 +334,171 @@ class Session:
             raise AppError("rig_failed")
         return self.state()
 
-    def _make_layers(self, task: Task, folder: Path, seed: int, whole: bool) -> None:
-        """The body-part layers of the drawings (parts.py). ``whole`` False: only the open hand is made again, the
-        other layers (perhaps corrected by the owner) are kept."""
+    def _bind_skeleton(self) -> Skeleton:
+        """The confirmed skeleton with every limb: a far arm or leg the owner did not place (hidden behind the body)
+        is taken as the near one, a little further back."""
         ch = self.character
-        rig_sk, hand_sk = self._rig_skeletons()
-        with Image.open(folder / "rig.png") as im:
-            rig_img = im.convert("RGBA")
+        pts = list(ch.skeleton.points)
+        back = FAR_BEHIND * ch.placement.figure_height
+        for near, far in zip((RSHO, RELB, RWRI, RHIP, RKNE, RANK), (LSHO, LELB, LWRI, LHIP, LKNE, LANK)):
+            if pts[far] is None and pts[near] is not None:
+                pts[far] = (pts[near][0] - back, pts[near][1])
+        return Skeleton(pts)
+
+    def _make_layers(self, task: Task, folder: Path, whole: bool) -> None:
+        """The part map (parts.py): each part cut from the owner's image, nothing repainted yet, for the owner to
+        correct before ``rebuild_hidden`` (owner, 2026-10-31). ``whole`` False: only the open hand is made again,
+        the other layers (perhaps corrected by the owner) are kept."""
+        ch = self.character
+        _, hand_sk = self._rig_skeletons()
         hand_img = None
         if (folder / "hand.png").exists():
             with Image.open(folder / "hand.png") as im:
                 hand_img = im.convert("RGBA")
         meta = None if whole else self._layers_info()
-        try:
-            if meta is None:
-                task.update(message="Đang tách các bộ phận…")
-                bind, missing = parts_mod.bind_skeleton(self._read_pose(rig_img), rig_sk)
-                finder = self.engine.parts
-                try:
-                    masks = parts_mod.find_parts(rig_img, bind, missing, finder)
-                finally:
-                    if finder is not None:
-                        finder.unload()
-                        self.engine.free_memory()
-
-                def progress(k: int, n: int) -> None:
-                    task.check_cancel()
-                    if k < n:
-                        task.update(message=f"Đang vẽ lại phần bị che ({k + 1}/{n})…")
-                layers = parts_mod.rebuild(self.engine, rig_img, masks, bind, ch.placement.image, ch.skeleton,
-                                           self.background, seed, progress)
-                # The face never drifts: the head is the owner's own; long hair adds only what the head has not.
-                head = owner_head(ch.placement.image, ch.skeleton, bind)
-                drawn_head = layers.get("head")
-                if drawn_head is not None and "torso" in layers:   # the reference's neck joins the body
-                    neck = below_neck(head.shape[:2], bind) & (drawn_head[..., 3] > 0)
-                    layers["torso"] = layers["torso"].copy()
-                    layers["torso"][neck] = drawn_head[neck]
-                layers["head"] = head
-                if "hair" in layers:
-                    layers["hair"] = layers["hair"].copy()
-                    layers["hair"][head[..., 3] > 0] = 0
-                    if not (layers["hair"][..., 3] > 0).any():
-                        del layers["hair"]
-            else:
-                layers = parts_mod.load_layers(folder / LAYERS_DIR)
-                bind = _skeleton(meta["bind"])
-        except EngineError as exc:
-            if exc.kind == "oom":
-                self.engine.free_memory()
-                raise AppError("gpu_out_of_memory") from exc
-            if exc.kind == "models_missing":
-                raise AppError("models_missing", detail=exc.detail) from exc
-            raise AppError("inference_failed", detail=exc.detail or exc.kind) from exc
+        if meta is None:
+            task.update(message="Đang tách các bộ phận…")
+            image = ch.placement.image
+            bind = self._bind_skeleton()
+            missing = {i for i, p in enumerate(ch.skeleton.points) if p is None}
+            finder = self.engine.parts
+            try:
+                masks = parts_mod.find_parts(image, bind, missing, finder)
+            except EngineError as exc:
+                raise self._engine_error(exc) from exc
+            finally:
+                if finder is not None:
+                    finder.unload()
+                    self.engine.free_memory()
+            arr = np.array(image.convert("RGBA"))
+            layers = {n: np.where(m[..., None], arr, 0).astype(np.uint8) for n, m in masks.items()}
+            # The head is cut level at the neck (the face never moves apart); below it, the neck joins the body.
+            head = owner_head(image, ch.skeleton, bind)
+            found_head = layers.get("head")
+            if found_head is not None and "torso" in layers:
+                neck = below_neck(head.shape[:2], bind) & (found_head[..., 3] > 0) & (head[..., 3] == 0)
+                layers["torso"] = layers["torso"].copy()
+                layers["torso"][neck] = found_head[neck]
+            layers["head"] = head
+            for name in [n for n in layers if n != "head"]:
+                layers[name] = layers[name].copy()
+                layers[name][head[..., 3] > 0] = 0     # nothing else keeps the head's pixels
+                if not (layers[name][..., 3] > 0).any():
+                    del layers[name]
+            meta = {"bind": bind.to_json(), "stage": "map", "order": None}
+        else:
+            layers = parts_mod.load_layers(folder / LAYERS_DIR)
+            bind = _skeleton(meta["bind"])
         layers.pop("open_hand", None)
         hand = open_hand_layer(hand_img, hand_sk, bind) if hand_img is not None else None
         if hand is not None:
             layers["open_hand"] = hand
-        self._save_layers(folder, rig_img, layers, bind)
+        if meta.get("stage", "parts") == "map":
+            parts_mod.save_layers(folder / MAP_DIR, layers)
+        elif hand is not None and (folder / MAP_DIR).is_dir():
+            Image.fromarray(hand, "RGBA").save(folder / MAP_DIR / "open_hand.png")   # back to the map keeps it
+        with Image.open(folder / "rig.png") as im:
+            guide = im.convert("RGBA")
+        self._save_layers(folder, guide, layers, meta)
 
-    def _save_layers(self, folder: Path, guide: Image.Image, layers: dict, bind: Skeleton) -> None:
+    def _engine_error(self, exc: EngineError) -> AppError:
+        if exc.kind == "oom":
+            self.engine.free_memory()
+            return AppError("gpu_out_of_memory")
+        if exc.kind == "models_missing":
+            return AppError("models_missing", detail=exc.detail)
+        return AppError("inference_failed", detail=exc.detail or exc.kind)
+
+    def _save_layers(self, folder: Path, guide: Image.Image, layers: dict, meta: dict) -> None:
+        """The layers the rig is built from, the Photoshop file of the stage (the part map, or the parts with the
+        hidden sections rebuilt) and ``meta`` (bind pose, stage, the owner's layer order, the file's time)."""
         parts_mod.save_layers(folder / LAYERS_DIR, layers)
-        psd = folder / PSD_FILE
+        psd = self._stage_file(folder, meta)
         try:
-            parts_mod.write_psd(psd, guide, layers, self.character.placement.mirrored)
+            parts_mod.write_psd(psd, guide, layers, self.character.placement.mirrored, meta.get("order"),
+                                overlay=meta.get("stage") == "map")
         except OSError as exc:
             raise AppError("rig_psd_busy") from exc
+        meta["psd_time"] = psd.stat().st_mtime_ns
         with open(folder / LAYERS_INFO, "w", encoding="utf-8") as f:
-            json.dump({"bind": bind.to_json(), "psd_time": psd.stat().st_mtime_ns}, f)
+            json.dump(meta, f)
+
+    @staticmethod
+    def _stage_file(folder: Path, meta: dict | None) -> Path:
+        """The Photoshop file of the stage: the part map, or the parts (rigs made before the map have only those)."""
+        return folder / (MAP_FILE if meta is not None and meta.get("stage") == "map" else PSD_FILE)
+
+    def rebuild_hidden(self, task: Task) -> dict:
+        """The AI paints what each part of the (corrected) part map hides; the parts then go to their own Photoshop
+        file for the last touches (about 5 minutes on the RTX 4060)."""
+        ch = self.character
+        if ch is None or self.rig is None:
+            raise AppError("rig_missing")
+        meta = self._layers_info()
+        if meta is None or meta.get("stage") != "map":
+            raise AppError("rig_map_missing")
+        folder = self.rig_dir / ch.key
+        psd = folder / MAP_FILE
+        if psd.exists() and psd.stat().st_mtime_ns != meta.get("psd_time"):
+            self._import_psd(folder)                 # saved in Photoshop and not taken back yet
+            meta = self._layers_info()
+        self._ensure_loaded(task)
+        layers = parts_mod.load_layers(folder / MAP_DIR)
+        hand = layers.pop("open_hand", None)
+        bind = _skeleton(meta["bind"])
+        order = parts_mod.full_order(meta.get("order"), layers)
+        context = Image.fromarray(parts_mod.map_view(layers, order, tint=0.0), "RGBA")
+        masks = {n: v[..., 3] > 127 for n, v in layers.items()}
+        task.update(stage="generating", total=1, done=0, message="Đang vẽ phần bị che…")
+
+        def progress(k: int, n: int) -> None:
+            task.check_cancel()
+            if k < n:
+                task.update(message=f"Đang vẽ phần bị che ({k + 1}/{n})…")
+        try:
+            out = parts_mod.rebuild(self.engine, context, masks, bind, ch.placement.image, ch.skeleton,
+                                    self.background, self.rig.seed, progress, start=layers)
+        except EngineError as exc:
+            raise self._engine_error(exc) from exc
+        if hand is not None:
+            out["open_hand"] = hand
+        with Image.open(folder / "rig.png") as im:
+            guide = im.convert("RGBA")
+        meta["stage"] = "parts"
+        self._save_layers(folder, guide, out, meta)
+        task.update(done=1)
+        with self._lock:
+            self._reset_frames()
+            self.template = None
+        self._load_rig()
+        if self.rig is None:
+            raise AppError("rig_failed")
+        return self.state()
+
+    def back_to_map(self) -> dict:
+        """Back to the part map as the owner last left it (the painted parts are dropped)."""
+        ch = self.character
+        if ch is None or self.rig is None:
+            raise AppError("rig_missing")
+        meta = self._layers_info()
+        folder = self.rig_dir / ch.key
+        if meta is None or meta.get("stage") != "parts" or not (folder / MAP_FILE).exists():
+            raise AppError("rig_map_missing")
+        layers = parts_mod.load_layers(folder / MAP_DIR)
+        if not layers:
+            raise AppError("rig_map_missing")
+        meta["stage"] = "map"
+        meta["psd_time"] = None                      # the map file is read again: it may have been saved since
+        parts_mod.save_layers(folder / LAYERS_DIR, layers)
+        with open(folder / LAYERS_INFO, "w", encoding="utf-8") as f:
+            json.dump(meta, f)
+        with self._lock:
+            self._reset_frames()
+            self.template = None
+        self._load_rig()
+        if self.rig is None:
+            raise AppError("rig_failed")
+        return self.state()
 
     def _layers_info(self) -> dict | None:
         try:
@@ -423,8 +520,8 @@ class Session:
             json.dump(info, f, ensure_ascii=False)
 
     def rig_edit_file(self) -> dict:
-        """The Photoshop file of the body parts, for the owner to correct (owner, 2026-10-31). ``reload_rig_edits``
-        takes it back; the app calls it when the file is saved."""
+        """The Photoshop file of the stage (the part map, or the parts), for the owner to correct (owner,
+        2026-10-31). ``reload_rig_edits`` takes it back; the app calls it when the file is saved."""
         ch = self.character
         if ch is None or self.rig is None:
             raise AppError("rig_missing")
@@ -457,17 +554,17 @@ class Session:
         return self.state()
 
     def _import_psd(self, folder: Path) -> None:
-        """The owner's Photoshop file into the layers. Raises AppError and keeps the old layers when it is not
-        usable."""
+        """The owner's Photoshop file of the stage into the layers, with the layer order the owner left. Raises
+        AppError and keeps the old layers when it is not usable."""
         ch = self.character
         meta = self._layers_info()
         if meta is None:
             raise AppError("rig_layers_missing")
-        psd = folder / PSD_FILE
+        psd = self._stage_file(folder, meta)
         old = parts_mod.load_layers(folder / LAYERS_DIR)
         size = ch.placement.image.size
         try:
-            new = parts_mod.read_psd(psd, size, ch.placement.mirrored)
+            new, order = parts_mod.read_psd(psd, size, ch.placement.mirrored)
         except ValueError as exc:
             raise AppError("rig_edit_size" if str(exc) == "size" else "rig_edit_unreadable") from exc
         except Exception as exc:  # noqa: BLE001
@@ -479,16 +576,19 @@ class Session:
             raise AppError("rig_edit_failed")        # most of the character erased, or the body layer gone
         bind = _skeleton(meta["bind"])
         try:
-            build_rig_from_layers(new, bind)
+            build_rig_from_layers(new, bind, [n for _, n in order])
         except Exception as exc:  # noqa: BLE001
             raise AppError("rig_edit_failed") from exc
         parts_mod.save_layers(folder / LAYERS_DIR, new)
+        if meta.get("stage") == "map":
+            parts_mod.save_layers(folder / MAP_DIR, new)
+        meta["order"] = [list(o) for o in order]
         meta["psd_time"] = psd.stat().st_mtime_ns
         with open(folder / LAYERS_INFO, "w", encoding="utf-8") as f:
             json.dump(meta, f)
 
     def _load_rig(self) -> None:
-        """The saved rig of this image, if it was drawn for the current skeleton."""
+        """The saved rig of this image, if it was made for the current skeleton."""
         ch = self.character
         with self._lock:
             self.rig = None
@@ -509,13 +609,15 @@ class Session:
             return
         rig_sk, hand_sk = self._rig_skeletons()
         meta = self._layers_info()
-        psd = folder / PSD_FILE
+        psd = self._stage_file(folder, meta)
         if meta is not None and psd.exists() and psd.stat().st_mtime_ns != meta.get("psd_time"):
             try:                                     # saved in Photoshop while the app was closed
                 self._import_psd(folder)
+                meta = self._layers_info()
             except AppError as exc:
                 import sys
                 print(f"parts file not taken: {exc.code}", file=sys.stderr)
+        stage = None
         try:
             hand_img = None
             if (folder / "hand.png").exists():
@@ -523,20 +625,26 @@ class Session:
                     hand_img = im.convert("RGBA")
             if meta is not None:
                 pose = _skeleton(meta["bind"])
-                rig = build_rig_from_layers(parts_mod.load_layers(folder / LAYERS_DIR), pose)
+                layers = parts_mod.load_layers(folder / LAYERS_DIR)
+                order = [n for _, n in parts_mod.full_order(meta.get("order"), layers)]
+                rig = build_rig_from_layers(layers, pose, order)
+                stage = meta.get("stage", "parts")
+                view = parts_mod.map_view(layers, meta.get("order")) if stage == "map" else None
             else:                                    # a rig made before the layers (2026-10-31)
                 pose = rig_sk
                 with Image.open(folder / "rig.png") as im:
                     rig_img = im.convert("RGBA")
                 rig = build_rig(ch.placement.image, ch.skeleton, rig_img, rig_sk, hand_img, hand_sk)
+                view = None
         except Exception as exc:  # noqa: BLE001
             import sys
             print(f"rig not usable: {type(exc).__name__}: {exc}", file=sys.stderr)
             return
         state = RigState(rig, int(info.get("seed", 0)), set(info.get("still", [])), pose=pose,
-                         psd=psd if meta is not None and psd.exists() else None)
+                         psd=psd if meta is not None and psd.exists() else None, stage=stage)
         state.view = self.temp / f"rig_view_{uuid.uuid4().hex[:8]}.png"
-        save_png(self._own_facing(self._rig_view(rig, pose, state.still)), state.view)
+        shown = Image.fromarray(view, "RGBA") if view is not None else self._rig_view(rig, pose, state.still)
+        save_png(self._own_facing(shown), state.view)
         if hand_img is not None:
             state.hand_view = self.temp / f"hand_view_{uuid.uuid4().hex[:8]}.png"
             save_png(self._own_facing(hand_img), state.hand_view)
@@ -898,6 +1006,7 @@ class Session:
                     "hand_view": str(self.rig.hand_view) if self.rig.hand_view else None,
                     "editing": list(self.rig.editing),
                     "psd": str(self.rig.psd) if self.rig.psd else None,
+                    "stage": self.rig.stage,
                     "hanging": [{"name": p.name, "on": p.name not in self.rig.still}
                                 for m in self.rig.rig.meshes for p in m.hanging],
                 },

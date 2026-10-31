@@ -341,9 +341,27 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   - The owner's custom poses (answer to "option 1", a pose editor) stay planned as the fallback for characters the
     built-in poses do not suit (owner, 2026-10-31).
 
+## Part map from the owner's own image (owner, 2026-10-31) — owner direction Confirmed, method Proposed
+
+- Why: the owner found the AI's spread-pose redraw of the whole character to be where most errors started; joint
+  editing alone would not fix a wrong drawing. The owner chose to correct the parts in Photoshop (option A), with
+  the layers grouped by kind, and to correct the reference before the expensive processing.
+- The owner's placed image is the reference (rig.png), never redrawn. The AI draws only an open hand.
+- Stage 1, the part map: the parts are found on the image itself against the confirmed skeleton (a far limb the
+  owner did not place sits 2% of the figure behind the near one), every pixel in exactly one part, the head always
+  whole. Saved as map.psd: groups back to front "Phụ kiện phía sau", "Tay chân phía xa", "Chân phía gần", "Thân",
+  "Phụ kiện phía trước", "Đầu", "Tay phía gần", plus a hidden colour overlay layer for viewing. A provisional rig is
+  built at once, so the owner can already preview poses.
+- Stage 2: "Vẽ phần bị che" paints what each part hides (about 5 minutes) and writes parts.psd for the last
+  touches. "Về bản đồ" goes back to the map as the owner left it; "Tách lại" splits again.
+- The layer order in either Photoshop file is the drawing order of the rig (dragging a layer moves that part in
+  front or behind). A map saved in Photoshop but not yet reloaded by the app is read before painting.
+- Real-engine check on the knight test art: map and hand 101 s, then the hidden sections; the near arm was merged
+  into the torso on the map, the kind of mistake the map stage exists for.
+- The pose editor (owner's option 1) stays the planned fallback for special characters.
+
 ## Not done on purpose
 
 - No free-form prompts, no batch generation, no automatic quality scoring, no Unity configuration files, no
   project library, no effects (§2 prohibited list).
-- No Jump/Fall/Hit/Death/A3/A4 templates in version 1 (cuts C1, C2).
 - No pixel-art step (C3).

@@ -69,6 +69,8 @@ public sealed class MainViewModel : ObservableObject
         RedrawRigPartCommand = new AsyncCommand(p => MakeRigAsync(p as string), OnError, _ => Ready && !IsBusy && HasRig);
         EditRigCommand = new AsyncCommand(_ => EditRigAsync(), OnError, _ => Ready && !IsBusy && HasPartsFile);
         ReloadRigCommand = new AsyncCommand(_ => ReloadRigAsync(), OnError, _ => Ready && !IsBusy && IsEditingRig);
+        RebuildRigCommand = new AsyncCommand(_ => RebuildRigAsync(), OnError, _ => Ready && !IsBusy && IsMapStage);
+        BackToMapCommand = new AsyncCommand(_ => BackToMapAsync(), OnError, _ => Ready && !IsBusy && IsPartsStage);
         GenerateCommand = new AsyncCommand(_ => GenerateAsync(), OnError, _ => CanGenerate);
         RegenerateAllCommand = new AsyncCommand(_ => RegenerateAsync(null), OnError,
                                                 _ => Ready && !IsBusy && HasFrames && CanRedraw);
@@ -154,13 +156,46 @@ public sealed class MainViewModel : ObservableObject
         private set { if (Set(ref _hasRig, value)) { Raise(nameof(RigText)); Raise(nameof(RigButtonText)); Raise(nameof(CanGenerate)); } }
     }
 
-    public string RigText => HasRig
-        ? "Phần tô màu sẽ đung đưa khi chuyển động. Bộ phận nào sai thì bấm “Sửa trong Photoshop”: mỗi bộ phận là một "
-          + "lớp riêng; sửa, lưu lại (Ctrl+S) là khung nhân vật được dựng lại. Hình nào hỏng hẳn thì bấm “Vẽ lại”."
-        : "AI vẽ nhân vật ở tư thế dang tay chân và một bàn tay mở, rồi tách từng bộ phận và vẽ nốt phần bị che "
-          + "(khoảng 8 phút). Mọi khung hình được làm từ các bộ phận này.";
+    public string RigText => !HasRig
+        ? "AI tách nhân vật trong chính ảnh của bạn thành từng bộ phận và vẽ thêm một bàn tay mở (khoảng 2 phút). "
+          + "Bạn sửa bản đồ bộ phận nếu cần, rồi AI vẽ nốt phần bị che. Mọi khung hình được làm từ các bộ phận này."
+        : IsMapStage
+        ? "Bộ phận nào tô sai thì bấm “Sửa trong Photoshop”: mỗi bộ phận là một lớp, xếp theo nhóm; chuyển điểm ảnh "
+          + "sang đúng lớp, kéo lớp lên xuống để đổi phần nào nằm trên, rồi lưu lại (Ctrl+S). Bản đồ đúng rồi thì bấm "
+          + "“Vẽ phần bị che” (khoảng 5 phút)."
+        : IsPartsStage
+        ? "Phần tô màu sẽ đung đưa khi chuyển động. Bộ phận nào còn sai thì bấm “Sửa trong Photoshop”, sửa rồi lưu lại "
+          + "(Ctrl+S). Muốn sửa lại cách tách bộ phận thì bấm “Về bản đồ”."
+        : "Phần tô màu sẽ đung đưa khi chuyển động. Khung nhân vật này làm bằng bản cũ; bấm “Tách lại” để tách các "
+          + "bộ phận từ chính ảnh của bạn.";
 
-    public string RigButtonText => HasRig ? "Vẽ lại cả hai hình" : "Vẽ khung nhân vật";
+    public string RigButtonText => HasRig ? "Làm lại khung nhân vật" : "Tạo khung nhân vật";
+
+    // "map": the parts as found on the owner's image; "parts": what they hide painted; null: a rig made before.
+    private string? _rigStage;
+    public string? RigStage
+    {
+        get => _rigStage;
+        private set
+        {
+            if (!Set(ref _rigStage, value)) return;
+            foreach (string p in new[] { nameof(IsMapStage), nameof(IsPartsStage), nameof(CanSplitAgain),
+                                         nameof(RigCaption), nameof(RigImageName), nameof(RigText) })
+                Raise(p);
+        }
+    }
+
+    public bool IsMapStage => RigStage == "map";
+    public bool IsPartsStage => RigStage == "parts";
+    public bool CanSplitAgain => !IsPartsStage;
+
+    public string RigCaption => IsMapStage
+        ? "Bản đồ bộ phận lấy từ chính ảnh của bạn, mỗi màu một bộ phận. Chỗ nào tô sai thì sửa trong Photoshop."
+        : IsPartsStage
+        ? "Nhân vật ghép từ các bộ phận, phần bị che đã được vẽ nốt."
+        : "Nhân vật ghép từ các bộ phận riêng.";
+
+    public string RigImageName => IsMapStage ? "Bản đồ bộ phận" : "Khung nhân vật";
 
     private bool _isEditingRig;
     public bool IsEditingRig { get => _isEditingRig; private set => Set(ref _isEditingRig, value); }
@@ -273,6 +308,8 @@ public sealed class MainViewModel : ObservableObject
     public ICommand RedrawRigPartCommand { get; }
     public ICommand EditRigCommand { get; }
     public ICommand ReloadRigCommand { get; }
+    public ICommand RebuildRigCommand { get; }
+    public ICommand BackToMapCommand { get; }
     public ICommand GenerateCommand { get; }
     public ICommand RegenerateAllCommand { get; }
     public ICommand RegenerateFrameCommand { get; }
@@ -389,21 +426,47 @@ public sealed class MainViewModel : ObservableObject
     // ---------------------------------------------------------------------------------------------------------
     // Step 2: rig
     // ---------------------------------------------------------------------------------------------------------
-    /// <param name="part">"rig" or "hand": only that drawing; null: both.</param>
+    /// <param name="part">"parts" (the part map again) or "hand": only that; null: both.</param>
     private async Task MakeRigAsync(string? part)
     {
         if (_api == null) return;
-        // A new spread-pose drawing makes every part again; only the hand keeps the owner's corrections.
-        if (IsEditingRig && part != "hand"
-            && System.Windows.MessageBox.Show(System.Windows.Application.Current.MainWindow,
-                   "Vẽ lại sẽ làm lại mọi bộ phận, những chỗ bạn đã sửa trong Photoshop sẽ mất. Vẫn vẽ lại?",
-                   "Vẽ lại khung nhân vật", System.Windows.MessageBoxButton.YesNo,
-                   System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes)
+        // Splitting again makes every part again; only the hand keeps the owner's corrections.
+        if ((IsEditingRig || IsPartsStage) && part != "hand"
+            && !Ask(part == null ? "Làm lại khung nhân vật" : "Tách lại các bộ phận",
+                    "Các bộ phận sẽ được tách lại từ ảnh của bạn; những chỗ đã sửa trong Photoshop"
+                    + (IsPartsStage ? " và phần đã vẽ nốt" : "") + " sẽ mất. Vẫn làm lại?"))
             return;
         StopPlay();
         TaskReply r = await _api.MakeRigAsync(null, part);
         await RunTaskAsync(r.Task!);
     }
+
+    /// <summary>The AI paints what each part of the part map hides (about five minutes).</summary>
+    private async Task RebuildRigAsync()
+    {
+        if (_api == null) return;
+        StopPlay();
+        TaskReply r = await _api.RebuildRigAsync();
+        await RunTaskAsync(r.Task!);
+    }
+
+    /// <summary>Back to the part map as the owner last left it; the painted parts are dropped.</summary>
+    private async Task BackToMapAsync()
+    {
+        if (_api == null) return;
+        if (!Ask("Về bản đồ bộ phận",
+                 "Phần đã vẽ nốt và những chỗ đã sửa trong tệp các bộ phận sẽ mất; bản đồ bộ phận vẫn giữ như bạn đã "
+                 + "sửa. Vẫn quay lại?"))
+            return;
+        StopPlay();
+        ApplyState(await _api.BackToMapAsync());
+        SetStatus(StatusKind.Ok, "Đã về bản đồ bộ phận. Sửa trong Photoshop nếu cần, rồi bấm “Vẽ phần bị che”.");
+    }
+
+    private static bool Ask(string title, string text) =>
+        System.Windows.MessageBox.Show(System.Windows.Application.Current.MainWindow, text, title,
+                                       System.Windows.MessageBoxButton.YesNo,
+                                       System.Windows.MessageBoxImage.Warning) == System.Windows.MessageBoxResult.Yes;
 
     /// <summary>The body parts open in Photoshop, one layer each (owner, 2026-10-31); saving rebuilds the rig.</summary>
     private async Task EditRigAsync()
@@ -424,7 +487,8 @@ public sealed class MainViewModel : ObservableObject
             OpenFolder(Path.GetDirectoryName(r.File)!);
         }
         SetStatus(StatusKind.Ok, photoshop != null
-            ? "Đã mở các bộ phận trong Photoshop. Sửa từng lớp (giữ tên lớp, đừng đổi cỡ hình), rồi lưu lại (Ctrl+S)."
+            ? (IsMapStage ? "Đã mở bản đồ bộ phận trong Photoshop. " : "Đã mở các bộ phận trong Photoshop. ")
+              + "Sửa từng lớp (giữ tên lớp, đừng đổi cỡ hình), rồi lưu lại (Ctrl+S)."
             : "Không thấy Photoshop nên đã mở tệp bằng chương trình mặc định. Sửa từng lớp rồi lưu lại dạng PSD.");
     }
 
@@ -449,7 +513,9 @@ public sealed class MainViewModel : ObservableObject
 
     private void WatchPartsFile(string file)
     {
-        if (_partsWatcher != null && _partsWatcher.Path == Path.GetDirectoryName(file)) return;
+        // The file changes between the stages (the part map, then the parts): one watcher per file.
+        if (_partsWatcher != null && _partsWatcher.Path == Path.GetDirectoryName(file)
+            && _partsWatcher.Filter == Path.GetFileName(file)) return;
         StopWatchingParts();
         _partsQuiet = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.5) };
         _partsQuiet.Tick += async (_, _) =>
@@ -530,6 +596,7 @@ public sealed class MainViewModel : ObservableObject
         HasHanging = HangingParts.Count > 0;
         IsEditingRig = rig is { Editing.Count: > 0 };
         HasPartsFile = rig?.Psd != null;
+        RigStage = rig?.Stage;
         if (!IsEditingRig) StopWatchingParts();
     }
 
@@ -621,7 +688,7 @@ public sealed class MainViewModel : ObservableObject
                 ProgressText = t.Message;
                 break;
             case "generating" when t.Kind == "rig":
-                SetStatus(StatusKind.Busy, "Đang vẽ khung nhân vật…");
+                SetStatus(StatusKind.Busy, "Đang dựng khung nhân vật…");
                 ProgressText = t.Message;
                 break;
             case "generating":
@@ -644,11 +711,15 @@ public sealed class MainViewModel : ObservableObject
         bool export = t.Kind == "export";
         switch (t.State)
         {
+            case "completed" when t.Kind == "rig" && IsMapStage:
+                SetStatus(StatusKind.Ok, "Đã tách các bộ phận. Kiểm tra bản đồ ở bước 2, sửa trong Photoshop nếu cần, "
+                                         + "rồi bấm “Vẽ phần bị che”.");
+                return;
             case "completed" when t.Kind == "rig":
-                SetStatus(StatusKind.Ok, "Đã vẽ khung nhân vật. Kiểm tra hình ở bước 2, rồi chọn hoạt ảnh và bấm Tạo.");
+                SetStatus(StatusKind.Ok, "Đã dựng khung nhân vật. Kiểm tra hình ở bước 2, rồi chọn hoạt ảnh và bấm Tạo.");
                 return;
             case "failed" when t.Kind == "rig":
-                SetStatus(StatusKind.Error, $"Vẽ khung nhân vật thất bại: {t.Error?.Message ?? "Lỗi không rõ."}");
+                SetStatus(StatusKind.Error, $"Dựng khung nhân vật thất bại: {t.Error?.Message ?? "Lỗi không rõ."}");
                 return;
             case "completed" when export:
                 SetStatus(StatusKind.Ok, $"Đã xuất xong 8 khung và sprite sheet vào: {ExportFolder}");

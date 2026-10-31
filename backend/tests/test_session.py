@@ -316,29 +316,109 @@ def test_one_rig_drawing_is_redrawn_and_the_other_kept(session, hero):
     assert run(lambda task: session.make_rig(task, seed=2)).state == "completed"
     folder = session.rig_dir / session.character.key
     body = (folder / "rig.png").read_bytes()
+    hand = (folder / "hand.png").read_bytes()
     t = run(lambda task: session.make_rig(task, seed=7, part="hand"))
     assert t.state == "completed", t.error
     assert (folder / "rig.png").read_bytes() == body and session.rig.seed == 2
     info = json.loads((folder / "rig.json").read_text(encoding="utf-8"))
     assert info["seed"] == 2 and info["hand_seed"] == 7
+    hand = (folder / "hand.png").read_bytes()
+    t = run(lambda task: session.make_rig(task, seed=9, part="parts"))   # the parts found again, the hand kept
+    assert t.state == "completed", t.error
+    assert (folder / "hand.png").read_bytes() == hand and session.rig.seed == 9
+    assert session.state()["rig"]["stage"] == "map"
 
 
-def test_the_rig_is_made_of_body_part_layers(session, hero):
+def test_the_part_map_is_cut_from_the_owners_own_image(session, hero):
+    from psd_tools import PSDImage
     from animgen import parts
     session.set_character(str(hero))
     assert run(lambda task: session.make_rig(task, seed=2)).state == "completed"
     folder = session.rig_dir / session.character.key
-    names = {p.stem for p in (folder / "layers").glob("*.png")}
-    assert {"torso", "head", "arm_upper", "arm_lower", "leg_upper", "leg_lower", "open_hand"} <= names
-    assert names <= set(parts.NAMES)
+    image = np.array(session.character.placement.image)
+    assert (np.array(Image.open(folder / "rig.png")) == image).all()     # no redrawing of the character
+    layers = parts.load_layers(folder / "layers")
+    assert {"torso", "head", "open_hand"} <= set(layers) <= set(parts.NAMES)
+    assert any(n in layers for n in ("arm_upper", "arm_lower")) and any(n in layers for n in ("leg_upper", "leg_lower"))
+    cut = np.zeros(image.shape[:2], bool)
+    for name, v in layers.items():
+        if name == "open_hand":
+            continue
+        own = v[..., 3] > 0
+        assert (v[own] == image[own]).all(), name                          # each part is the image's own pixels
+        assert not (cut & own).any(), name                                  # and no pixel is in two parts
+        cut |= own
+    assert cut.sum() >= 0.99 * (image[..., 3] > 127).sum()                  # the whole figure is shared out
     st = session.state()["rig"]
-    assert Path(st["psd"]).is_file()
-    from psd_tools import PSDImage
+    assert st["stage"] == "map" and Path(st["psd"]).name == "map.psd"
     psd = PSDImage.open(st["psd"])
     labels = [layer.name for layer in psd.descendants()]
-    assert labels[0] == parts.GUIDE and parts.GROUP in labels and parts.LABELS["torso"] in labels
-    hand = [layer for layer in psd.descendants() if layer.name == parts.LABELS["open_hand"]][0]
-    assert not hand.visible                              # shown only in the frames that open the hand
+    assert labels[0] == parts.GUIDE and labels[-1] == parts.OVERLAY and parts.LABELS["torso"] in labels
+    groups = [layer.name for layer in psd if layer.is_group()]
+    assert groups and set(groups) <= {g for g, _ in parts.GROUPS}           # sorted by kind: limbs, body, head…
+    top = {layer.name: layer for layer in psd.descendants()}
+    assert not top[parts.OVERLAY].visible and not top[parts.LABELS["open_hand"]].visible
+
+
+def test_hidden_sections_are_painted_after_the_map_and_the_map_comes_back(session, hero):
+    from animgen import parts
+    session.set_character(str(hero))
+    assert run(lambda task: session.make_rig(task, seed=2)).state == "completed"
+    folder = session.rig_dir / session.character.key
+    before = parts.load_layers(folder / "layers")
+    t = run(session.rebuild_hidden)
+    assert t.state == "completed", t.error
+    st = session.state()["rig"]
+    assert st["stage"] == "parts" and Path(st["psd"]).name == "parts.psd"
+    after = parts.load_layers(folder / "layers")
+    for name, v in before.items():                        # what showed stays, the hidden sections are added
+        own = v[..., 3] > 127
+        assert (after[name][own] == v[own]).all(), name
+    st = session.back_to_map()
+    assert st["rig"]["stage"] == "map"
+    again = parts.load_layers(folder / "layers")
+    assert set(again) == set(before) and all((again[n] == before[n]).all() for n in before)
+    with pytest.raises(AppError) as e:
+        session.back_to_map()
+    assert e.value.code == "rig_map_missing"
+
+
+def test_a_map_saved_in_photoshop_is_used_even_before_the_app_reloads_it(session, hero):
+    from animgen import parts
+    session.set_character(str(hero))
+    assert run(lambda task: session.make_rig(task, seed=2)).state == "completed"
+    folder = session.rig_dir / session.character.key
+    size, mirrored = session.character.placement.image.size, session.character.placement.mirrored
+    psd = Path(session.rig_edit_file()["file"])
+    layers, order = parts.read_psd(psd, size, mirrored)
+    layers["torso"][..., 2] = np.where(layers["torso"][..., 3] > 0, 3, layers["torso"][..., 2])
+    parts.write_psd(psd, Image.open(folder / "rig.png"), layers, mirrored, order, overlay=True)
+    t = run(session.rebuild_hidden)                       # clicked before the save was taken back
+    assert t.state == "completed", t.error
+    torso = parts.load_layers(folder / "layers")["torso"]
+    own = layers["torso"][..., 3] > 127
+    assert (torso[own][:, 2] == 3).all()
+
+
+def test_the_layer_order_in_photoshop_is_the_drawing_order(session, hero):
+    from animgen import parts
+    session.set_character(str(hero))
+    assert run(lambda task: session.make_rig(task, seed=2)).state == "completed"
+    folder = session.rig_dir / session.character.key
+    size, mirrored = session.character.placement.image.size, session.character.placement.mirrored
+    psd = Path(session.rig_edit_file()["file"])
+    layers, order = parts.read_psd(psd, size, mirrored)
+    names = [n for _, n in order]
+    assert names.index("torso") < names.index("arm_upper")
+    # The owner drags the near upper arm under the body, into the far limbs' group.
+    order = [o for o in order if o[1] != "arm_upper"]
+    order.insert(0, ("Tay chân phía xa", "arm_upper"))
+    parts.write_psd(psd, Image.open(folder / "rig.png"), layers, mirrored, order, overlay=True)
+    session.reload_rig_edits()
+    meshes = [m.name for m in session.rig.rig.meshes]
+    assert meshes.index("arm") < meshes.index("body")
+    back, again = parts.read_psd(psd, size, mirrored)
+    assert [n for _, n in again][0] == "arm_upper"
 
 
 def test_the_owner_corrects_the_parts_in_photoshop(session, hero):
@@ -351,7 +431,7 @@ def test_the_owner_corrects_the_parts_in_photoshop(session, hero):
     assert r["file"] == session.state()["rig"]["psd"] and r["state"]["rig"]["editing"] == ["parts"]
     guide = Image.open(folder / "rig.png")
 
-    layers = parts.read_psd(Path(r["file"]), size, mirrored)
+    layers, _ = parts.read_psd(Path(r["file"]), size, mirrored)
     layers["torso"][..., 0] = np.where(layers["torso"][..., 3] > 0, 255, layers["torso"][..., 0])
     del layers["head"]                                   # the owner may delete a part
     parts.write_psd(Path(r["file"]), guide, layers, mirrored)
@@ -389,7 +469,7 @@ def test_a_photoshop_file_saved_while_the_app_was_closed_is_taken_on_start(tmp_p
     size, mirrored = s.character.placement.image.size, s.character.placement.mirrored
     psd = Path(s.state()["rig"]["psd"])
     s.close()
-    layers = parts.read_psd(psd, size, mirrored)
+    layers, _ = parts.read_psd(psd, size, mirrored)
     layers["torso"][..., 1] = np.where(layers["torso"][..., 3] > 0, 7, layers["torso"][..., 1])
     time.sleep(0.05)
     parts.write_psd(psd, Image.open(folder / "rig.png"), layers, mirrored)
@@ -421,8 +501,9 @@ def test_psd_round_trip_keeps_names_places_and_facing(tmp_path):
     for mirrored in (False, True):
         path = tmp_path / f"p{mirrored}.psd"
         parts.write_psd(path, guide, {"torso": a, "arm_upper": b}, mirrored)
-        back = parts.read_psd(path, (48, 64), mirrored)
+        back, order = parts.read_psd(path, (48, 64), mirrored)
         assert set(back) == {"torso", "arm_upper"}
+        assert order == [("Thân", "torso"), ("Tay phía gần", "arm_upper")]
         assert (back["torso"] == a).all() and (back["arm_upper"] == b).all()
 
 

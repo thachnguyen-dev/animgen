@@ -46,12 +46,18 @@ public sealed class BackendClient : IDisposable
     public Task<CharacterReply> ConfirmSkeletonAsync(IEnumerable<double[]?> points) =>
         PostAsync<CharacterReply>("character/skeleton", new { points = points.ToArray() });
 
-    /// <summary>The AI draws the character's rig and open-hand images (about two minutes).</summary>
-    /// <param name="part">"rig" or "hand": only that drawing is redrawn; null: both.</param>
+    /// <summary>The part map cut from the character's own image, and the AI's open hand (about two minutes).</summary>
+    /// <param name="part">"parts" or "hand": only that is made again; null: both.</param>
     public Task<TaskReply> MakeRigAsync(int? seed, string? part = null) =>
         PostAsync<TaskReply>("rig", new { seed, part });
 
-    /// <summary>A copy of one rig drawing ("rig" or "hand") to paint over in the owner's own editor.</summary>
+    /// <summary>The AI paints what each part of the part map hides (about five minutes).</summary>
+    public Task<TaskReply> RebuildRigAsync() => PostAsync<TaskReply>("rig/rebuild", new { });
+
+    /// <summary>Back to the part map; the painted parts are dropped.</summary>
+    public Task<SessionState> BackToMapAsync() => PostAsync<SessionState>("rig/map", new { });
+
+    /// <summary>The Photoshop file of the stage (the part map, or the parts) for the owner to correct.</summary>
     public Task<EditReply> EditRigAsync() => PostAsync<EditReply>("rig/edit", new { });
 
     /// <summary>The rig rebuilt from the edited drawings.</summary>

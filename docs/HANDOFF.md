@@ -99,3 +99,9 @@ PowerShell scripts.
   session._make_layers / _import_psd, POST /rig/edit returns the PSD. New models sam2 and clothes-parsing (in
   scripts/download_models.py); psd-tools in both requirements files. Real runs: knight 380 s for the layers from
   an existing drawing, archer 328 s. Sheets in the session scratchpad only (test art).
+- Every pose done (20 animations, DECISIONS.md "Every pose first"); shape test character
+  (dev/tools/shape_character.py, dev/test_art/test_shapes.png) renders all of them to D:/Game/ainm/pose_test for the
+  owner to tune poses.
+- Part map flow (DECISIONS.md "Part map from the owner's own image"): POST /rig (part "parts"|"hand"),
+  /rig/rebuild, /rig/map; RigInfo.Stage in the app; step 2 shows the map, "Vẽ phần bị che", "Tách lại",
+  "Về bản đồ".

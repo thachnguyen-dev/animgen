@@ -107,7 +107,14 @@ def test_full_flow(server, tmp_path):
     st, r = call(server, "POST", "/rig/edit")             # the Photoshop file of the parts
     assert st == 200 and r["file"].endswith(".psd") and r["state"]["rig"]["editing"] == ["parts"]
     st, state = call(server, "POST", "/rig/reload")
-    assert st == 200 and state["rig"] is not None
+    assert st == 200 and state["rig"] is not None and state["rig"]["stage"] == "map"
+    st, err = call(server, "POST", "/rig/map")            # nothing painted yet: no going back
+    assert st == 400 and err["error"]["code"] == "rig_map_missing"
+    st, r = call(server, "POST", "/rig/rebuild")          # the AI paints what the parts hide
+    task = wait_task(server, r["task"]["id"])
+    assert task["state"] == "completed" and task["result"]["rig"]["stage"] == "parts", task
+    st, state = call(server, "POST", "/rig/map")
+    assert st == 200 and state["rig"]["stage"] == "map"
 
     st, r = call(server, "POST", "/generate", {"animation": "a2"})
     assert st == 200
