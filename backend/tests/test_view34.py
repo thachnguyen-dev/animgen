@@ -153,6 +153,40 @@ def test_projection_is_a_side_view_at_zero_turn(monkeypatch):
     assert math.isclose(x, 0.1) and math.isclose(y, 0.2) and math.isclose(d, 0.05)
 
 
+def _turned(points):
+    """The same joints with the shoulders and hips spread and both eyes shown: a 3/4 skeleton."""
+    from animgen.skeleton import LHIP, NOSE, REYE
+    pts = [None if p is None else list(p) for p in points]
+    ys = [p[1] for p in pts if p is not None]
+    h = max(ys) - min(ys)
+    pts[LSHO][0] = pts[RSHO][0] + 0.12 * h
+    pts[LHIP][0] += 0.08 * h
+    nose = pts[NOSE] or pts[1]
+    pts[REYE], pts[LEYE] = [nose[0] - 0.02 * h, nose[1] - 0.02 * h], [nose[0] + 0.02 * h, nose[1] - 0.02 * h]
+    return pts
+
+
+def test_the_view_is_guessed_again_from_the_confirmed_skeleton(session, hero):
+    # Owner, 2026-10-31: the corrected joints decide the view, unless the owner chose it.
+    ch = session.set_character(str(hero))
+    assert ch.angle == "side" and ch.angle_source == "detected"
+    ch = session.confirm_skeleton(_turned(ch.view_points()))
+    assert ch.angle == "34" and ch.angle_source == "detected"
+    ch = session.set_character(str(hero))                     # opened again: the saved view
+    assert ch.angle == "34" and ch.angle_source == "saved"
+
+
+def test_the_owners_view_is_not_guessed_over(session, hero):
+    ch = session.set_character(str(hero))
+    session.set_angle("side")                                 # chosen by the owner
+    ch = session.confirm_skeleton(_turned(ch.view_points()))
+    assert ch.angle == "side" and ch.angle_owner
+    ch = session.set_character(str(hero))
+    assert ch.angle == "side" and ch.angle_owner
+    ch = session.confirm_skeleton(_turned(ch.view_points()))
+    assert ch.angle == "side"
+
+
 def test_flipping_the_facing_keeps_the_owners_angle(session, hero):
     session.set_character(str(hero))
     session.set_angle("34")                                   # chosen before the skeleton is confirmed

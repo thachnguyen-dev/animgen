@@ -70,13 +70,13 @@ public partial class MainWindow : Window
         await Vm.DeletePoseAsync(a.Id);
     }
 
-    private void CheckSkeleton()
+    private async void CheckSkeleton()
     {
         if (Vm.Api == null || Vm.Skeleton?.Image == null) return;
         try
         {
             var dlg = new SkeletonDialog(Vm.Api, Vm.Skeleton) { Owner = this };
-            if (dlg.ShowDialog() == true && dlg.Reply != null) Vm.ApplySkeletonReply(dlg.Reply);
+            if (dlg.ShowDialog() == true && dlg.Reply != null) await Vm.ApplySkeletonReplyAsync(dlg.Reply);
         }
         catch (InvalidOperationException ex)
         {

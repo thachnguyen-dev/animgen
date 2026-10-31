@@ -403,6 +403,9 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   animation list follows the character's angle (GET /animations), so a 3/4 character sees A3 as "không có ở góc
   ba phần tư" and cannot generate it (error animation_not_for_angle); side characters keep A3. Special poses are
   made with the pose editor instead (next section).
+- The view is guessed again when the owner confirms the skeleton (owner, 2026-10-31): the corrected joints decide
+  side or 3/4, unless the owner chose the view ("Đổi góc nhìn"); that choice is saved with the skeleton
+  (angle_owner) and never guessed over. Skeletons saved before this count as the owner's choice.
 - Test character: dev/tools/shape_character.py --view 34 (drawn from the same 3D body) renders all animations to
   D:/Game/ainm/pose_test_34.
 

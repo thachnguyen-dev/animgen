@@ -498,12 +498,18 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>The skeleton dialog's reply: the confirmed skeleton, and the frames the backend dropped with the old one.</summary>
-    public void ApplySkeletonReply(CharacterReply r)
+    public async Task ApplySkeletonReplyAsync(CharacterReply r)
     {
         Skeleton = r.Character?.Skeleton;
         if (r.State != null) ApplyState(r.State);
-        SetStatus(StatusKind.Ok, HasRig ? "Đã xác nhận khung xương. Hãy chọn hoạt ảnh rồi bấm Tạo."
-                                        : "Đã xác nhận khung xương. Hãy vẽ khung nhân vật (bước 2).");
+        // The view is guessed again from the corrected joints unless the owner chose it (owner, 2026-10-31).
+        string before = _angle;
+        if (r.Character != null) ApplyAngle(r.Character);
+        if (_angle != before) await ReloadAnimationsAsync();
+        string view = _angle != before ? (_angle == "34" ? " Góc nhìn đổi thành ba phần tư theo khung xương mới."
+                                                          : " Góc nhìn đổi thành ngang theo khung xương mới.") : "";
+        SetStatus(StatusKind.Ok, (HasRig ? "Đã xác nhận khung xương. Hãy chọn hoạt ảnh rồi bấm Tạo."
+                                         : "Đã xác nhận khung xương. Hãy vẽ khung nhân vật (bước 2).") + view);
         CommandManager.InvalidateRequerySuggested();
     }
 

@@ -62,6 +62,7 @@ class Character:
     view_image: Path | None = None      # the canvas image in the character's own facing, for the skeleton editor
     angle: str = "side"                 # 'side' or '34' (turned three-quarters toward the viewer): the pose set
     angle_source: str = "detected"      # 'detected', 'owner' or 'saved'
+    angle_owner: bool = False           # the owner chose the angle: never guessed again
 
     def view_points(self) -> list:
         """The skeleton on ``view_image`` (the character's own facing), as the editor shows it."""
@@ -217,18 +218,19 @@ class Session:
             skel_source, confirmed = "saved", True
         assert skel is not None
         if saved is not None and saved.get("angle") in ANGLES:
-            angle, angle_source = saved["angle"], "saved"
-        elif self.character is not None and self.character.key == key and self.character.angle_source == "owner":
-            angle, angle_source = self.character.angle, "owner"    # the same image again (facing flipped)
+            # Saved before the owner's choice was recorded: taken as the owner's, so it is never guessed over.
+            angle, angle_source, angle_owner = saved["angle"], "saved", bool(saved.get("angle_owner", True))
+        elif self.character is not None and self.character.key == key and self.character.angle_owner:
+            angle, angle_source, angle_owner = self.character.angle, "owner", True    # same image, facing flipped
         else:
-            angle, angle_source = guess_angle(skel), "detected"
+            angle, angle_source, angle_owner = guess_angle(skel), "detected", False
         view_image = self.temp / f"skeleton_view_{uuid.uuid4().hex[:8]}.png"
         save_png(placement.image.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if placement.mirrored
                  else placement.image, view_image)
         with self._lock:
             self.character = Character(ch_in, placement, skel, facing, source,
                                        name or Path(path).stem, key, skel_source, confirmed, view_image,
-                                       angle, angle_source)
+                                       angle, angle_source, angle_owner)
             self.background = pick_background_colour(placement.image)
             self._reset_frames()
             self.template = None
@@ -263,6 +265,9 @@ class Session:
         with self._lock:
             ch.skeleton = view.mirrored(size) if ch.placement.mirrored else view
             ch.skeleton_source, ch.skeleton_confirmed = "saved", True
+            if not ch.angle_owner:
+                # Guessed again from the owner's corrected joints (owner, 2026-10-31), unless they chose the view.
+                ch.angle, ch.angle_source = guess_angle(ch.skeleton), "detected"
             self._reset_frames()
             self.template = None
             self.rig = None
@@ -273,7 +278,8 @@ class Session:
     def _save_skeleton(self, ch: Character) -> None:
         self.skeleton_dir.mkdir(parents=True, exist_ok=True)
         with open(self.skeleton_dir / f"{ch.key}.json", "w", encoding="utf-8") as f:
-            json.dump({"facing": ch.facing, "angle": ch.angle, "points": ch.view_points()}, f, ensure_ascii=False)
+            json.dump({"facing": ch.facing, "angle": ch.angle, "angle_owner": ch.angle_owner,
+                       "points": ch.view_points()}, f, ensure_ascii=False)
 
     def set_angle(self, angle: str) -> Character:
         """The owner's choice of the character's angle: the pose set every animation is made from (owner,
@@ -284,7 +290,7 @@ class Session:
         if angle not in ANGLES:
             raise AppError("bad_request")
         with self._lock:
-            ch.angle, ch.angle_source = angle, "owner"
+            ch.angle, ch.angle_source, ch.angle_owner = angle, "owner", True
             self._reset_frames()
             self.template = None
         if ch.skeleton_confirmed:
