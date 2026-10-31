@@ -5,8 +5,12 @@ the character image, confirms its skeleton and writes its rig (the body-part lay
 into the app's data folder. No AI drawing is needed: opening the image in the app finds the rig at once, and every
 animation is made in seconds. Then it renders all the animations into sheets and GIFs.
 
-usage: python shape_character.py [--data C:/AnimGen] [--out D:/Game/ainm/pose_test]
+usage: python shape_character.py [--view side|34] [--data C:/AnimGen] [--out D:/Game/ainm/pose_test]
 (run with the app closed: it writes into the app's data folder)
+
+--view 34 draws the character in a three-quarter view (owner, 2026-10-31): turned a little toward the viewer, so the
+far shoulder and hip sit further back, the torso is wider, both eyes show and the far limbs are in plain view. It goes
+to test_shapes_34.png and D:/Game/ainm/pose_test_34 by default.
 """
 from __future__ import annotations
 
@@ -26,12 +30,16 @@ from animgen import parts as parts_mod  # noqa: E402
 from animgen.authoring import Pose, solve  # noqa: E402
 from animgen.engines.demo import DemoEngine  # noqa: E402
 from animgen.session import LAYERS_DIR, LAYERS_INFO, PSD_FILE, Session  # noqa: E402
-from animgen.skeleton import (LANK, LELB, LHIP, LKNE, LSHO, LWRI, NECK, NOSE, RANK, REAR, RELB, REYE, RHIP,  # noqa
+from animgen.skeleton import (LANK, LELB, LEYE, LHIP, LKNE, LSHO, LWRI, NECK, NOSE, RANK, REAR, RELB, REYE, RHIP,  # noqa
                               RKNE, RSHO, RWRI)
 from animgen.tasks import TaskRunner  # noqa: E402
 from animgen.templates import ANIMATIONS  # noqa: E402
 
 IMAGE = HERE.parents[2] / "dev" / "test_art" / "test_shapes.png"
+IMAGE_34 = HERE.parents[2] / "dev" / "test_art" / "test_shapes_34.png"
+# Three-quarter view: how far back the far side sits (template units), and the wider torso.
+BACK_34 = {"shoulder": 0.075, "hip": 0.05}
+TORSO_PAD_34 = 0.035
 # The character's own pose (the bind pose): arms and legs a little apart so every part shows.
 BIND = Pose(spine=2, head=0, r_sh=22, r_el=25, l_sh=-22, l_el=25, r_hip=14, r_knee=4, l_hip=-12, l_knee=4)
 FIGURE_PX = 900            # figure height in the drawn image
@@ -47,9 +55,16 @@ LIMBS = {"far_arm_upper": (LSHO, LELB), "far_arm_lower": (LELB, LWRI), "far_leg_
          "arm_upper": (RSHO, RELB), "arm_lower": (RELB, RWRI)}
 
 
-def joints(size: tuple[int, int]) -> tuple[list, float]:
+def joints(size: tuple[int, int], view: str = "side") -> tuple[list, float]:
     """The bind pose in image pixels, feet on a line near the bottom, and pixels per template unit."""
     pts, _ = solve(BIND)
+    if view == "34":
+        pts = list(pts)
+        for idx, back in ((LSHO, "shoulder"), (LELB, "shoulder"), (LWRI, "shoulder"),
+                          (LHIP, "hip"), (LKNE, "hip"), (LANK, "hip")):
+            pts[idx] = (pts[idx][0] - BACK_34[back], pts[idx][1] - 0.006)   # the far side a little higher too
+        pts[REYE] = (pts[REYE][0] - 0.03, pts[REYE][1])                     # the near eye toward the middle
+        pts[LEYE] = (pts[REYE][0] + 0.045, pts[REYE][1] - 0.002)            # the far eye by the front edge
     u = FIGURE_PX
     w, h = size
     return [None if p is None else (w * 0.45 + p[0] * u, h - 40 + p[1] * u) for p in pts], u
@@ -67,7 +82,7 @@ def _circle(img: np.ndarray, c, r: float, colour, line: int) -> None:
     cv2.circle(img, pc, int(round(r)), (*colour, 255), -1, cv2.LINE_AA)
 
 
-def draw_layers(P: list, u: float, size: tuple[int, int]) -> dict[str, np.ndarray]:
+def draw_layers(P: list, u: float, size: tuple[int, int], view: str = "side") -> dict[str, np.ndarray]:
     """Each part as a canvas-sized RGBA layer, drawn whole (nothing hidden)."""
     w, h = size
     line = max(2, int(round(0.006 * u)))
@@ -90,10 +105,19 @@ def draw_layers(P: list, u: float, size: tuple[int, int]) -> dict[str, np.ndarra
             _capsule(img, (ankle[0] - 0.01 * u, ankle[1] + 0.012 * u), (ankle[0] + 0.07 * u, ankle[1] + 0.02 * u),
                      0.045 * u, dark, line)
         out[name] = img
-    # Torso: a capsule from the neck to the middle of the hips.
+    # Torso: a capsule from the neck to the middle of the hips (side), or a block over both shoulders and hips (3/4).
     img = blank()
     hip = ((P[RHIP][0] + P[LHIP][0]) / 2, (P[RHIP][1] + P[LHIP][1]) / 2)
-    _capsule(img, (P[NECK][0], P[NECK][1] + 0.02 * u), hip, WIDTH["torso"] * u, COLOUR["torso"], line)
+    if view == "34":
+        pad = TORSO_PAD_34 * u
+        quad = np.array([(P[LSHO][0] - pad, P[LSHO][1] - 0.01 * u), (P[RSHO][0] + pad, P[RSHO][1] - 0.01 * u),
+                         (P[RHIP][0] + pad, P[RHIP][1] + 0.02 * u), (P[LHIP][0] - pad, P[LHIP][1] + 0.02 * u)],
+                        np.int32)
+        cv2.polylines(img, [quad], True, (*OUTLINE, 255), int(2 * line + 0.05 * u), cv2.LINE_AA)
+        cv2.polylines(img, [quad], True, (*COLOUR["torso"], 255), int(0.05 * u), cv2.LINE_AA)
+        cv2.fillPoly(img, [quad], (*COLOUR["torso"], 255), cv2.LINE_AA)
+    else:
+        _capsule(img, (P[NECK][0], P[NECK][1] + 0.02 * u), hip, WIDTH["torso"] * u, COLOUR["torso"], line)
     cv2.line(img, (int(hip[0] - 0.07 * u), int(hip[1] - 0.01 * u)), (int(hip[0] + 0.07 * u), int(hip[1] - 0.01 * u)),
              (*OUTLINE, 255), line, cv2.LINE_AA)                             # a belt line
     out["torso"] = img
@@ -107,10 +131,12 @@ def draw_layers(P: list, u: float, size: tuple[int, int]) -> dict[str, np.ndarra
     d = ImageDraw.Draw(pil)
     box = (c[0] - r, c[1] - r, c[0] + r, c[1] + r)
     d.pieslice(box, 150, 300, fill=(90, 60, 45, 255), outline=(*OUTLINE, 255), width=line)  # hair, back and top
-    e = P[REYE]
-    d.ellipse((e[0] - 0.016 * u, e[1] - 0.016 * u, e[0] + 0.016 * u, e[1] + 0.016 * u), fill=(255, 255, 255, 255),
-              outline=(*OUTLINE, 255), width=max(1, line // 2))
-    d.ellipse((e[0] - 0.002 * u, e[1] - 0.008 * u, e[0] + 0.012 * u, e[1] + 0.008 * u), fill=(*OUTLINE, 255))
+    for e, s in ((P[REYE], 1.0), (P[LEYE], 0.8)):
+        if e is None:
+            continue
+        d.ellipse((e[0] - 0.016 * s * u, e[1] - 0.016 * u, e[0] + 0.016 * s * u, e[1] + 0.016 * u),
+                  fill=(255, 255, 255, 255), outline=(*OUTLINE, 255), width=max(1, line // 2))
+        d.ellipse((e[0] - 0.002 * u, e[1] - 0.008 * u, e[0] + 0.012 * s * u, e[1] + 0.008 * u), fill=(*OUTLINE, 255))
     m = (P[NOSE][0] - 0.015 * u, P[NOSE][1] + 0.03 * u)
     d.line((m[0] - 0.02 * u, m[1], m[0] + 0.005 * u, m[1]), fill=(*OUTLINE, 255), width=line)
     out["head"] = np.array(pil)
@@ -140,21 +166,25 @@ def composite(layers: dict[str, np.ndarray]) -> Image.Image:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--view", choices=("side", "34"), default="side")
     ap.add_argument("--data", default="C:/AnimGen")
-    ap.add_argument("--out", default="D:/Game/ainm/pose_test")
+    ap.add_argument("--out")
     args = ap.parse_args()
-    data, out = Path(args.data), Path(args.out)
+    view = args.view
+    data = Path(args.data)
+    out = Path(args.out or ("D:/Game/ainm/pose_test" if view == "side" else "D:/Game/ainm/pose_test_34"))
+    image_path = IMAGE if view == "side" else IMAGE_34
 
     # 1. The character image (what the owner opens in the app).
     size = (700, 1100)
-    P, u = joints(size)
-    image = composite(draw_layers(P, u, size))
-    IMAGE.parent.mkdir(parents=True, exist_ok=True)
-    image.save(IMAGE)
+    P, u = joints(size, view)
+    image = composite(draw_layers(P, u, size, view))
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image.save(image_path)
 
     # 2. Its skeleton on the app's canvas, confirmed as the owner would.
     s = Session(DemoEngine(), data, require_rig=True)
-    ch = s.set_character(str(IMAGE), "right")
+    ch = s.set_character(str(image_path), "right")
     raw = image.getchannel("A").getbbox()
     can = ch.placement.image.getchannel("A").getbbox()
     k = (can[3] - can[1]) / (raw[3] - raw[1])
@@ -166,7 +196,7 @@ def main() -> None:
 
     # 3. The rig: the same shapes drawn on the canvas are the body-part layers (bind pose = the image's pose).
     canvas = ch.placement.image.size
-    layers = draw_layers([None if p is None else tuple(p) for p in pts], u * k, canvas)
+    layers = draw_layers([None if p is None else tuple(p) for p in pts], u * k, canvas, view)
     folder = s.rig_dir / ch.key
     folder.mkdir(parents=True, exist_ok=True)
     guide = composite(layers)
@@ -180,7 +210,7 @@ def main() -> None:
         json.dump({"bind": ch.skeleton.to_json(), "psd_time": (folder / PSD_FILE).stat().st_mtime_ns}, f)
     s._load_rig()
     assert s.rig is not None, "the rig did not load"
-    print("character", IMAGE, "rig", folder)
+    print("character", image_path, "rig", folder)
 
     # 4. Every animation, as a sheet (one row each) and a GIF.
     out.mkdir(parents=True, exist_ok=True)
