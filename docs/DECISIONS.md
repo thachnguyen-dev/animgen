@@ -381,6 +381,11 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
 - Owner corrections (2026-10-31): the far (left) arm always stays behind the body; the kick swings across the
   picture at full length and a little higher (it shrank toward the viewer); the bow is drawn level across the
   picture (the chest turned toward profile) instead of back into it.
+- Second round (owner, 2026-10-31): two-handed weapons (A3, A4) keep both hands together on one handle in every
+  frame (the far hand placed on the handle in 3D, its arm solved to reach it), so a weapon can be attached; the
+  spear's right hand leads with the arm extended forward and the left hand behind it on the shaft; the bow keeps
+  fists (no open hand); a limb pointing toward the viewer is shortened along its length only and keeps its width
+  (a leg looked enlarged next to the shrunk other one).
 - Test character: dev/tools/shape_character.py --view 34 (drawn from the same 3D body) renders all animations to
   D:/Game/ainm/pose_test_34.
 

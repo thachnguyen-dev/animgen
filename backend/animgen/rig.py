@@ -55,6 +55,7 @@ HAND_CUT = 0.8            # of the forearm from the elbow: the hand (with the wr
 MESH_STEP = 6            # px between mesh vertices
 JOINT_BLEND = 0.03        # of the figure height: how far across a border between parts the two bones blend
 HEAD_TURN = 30.0          # degrees: the most the head turns away from the bind pose
+LIMB_SHORTEST = 0.5       # a limb pointing at the viewer is drawn no shorter than this share of its length
 
 # The meshes, back to front: name, its two pieces in drawing order, parent first (the piece, the bind bone it hangs
 # on, the frame bone that moves it), and whether it is darkened as far.
@@ -192,7 +193,24 @@ class Rig:
             return None
         if bind_bone == "head":
             return _head_matrix(a, b, a2, b2)
+        if bind_bone in LIMBS:
+            return _limb_matrix(a, b, a2, b2)
         return _similarity(a, b, a2, b2)
+
+
+def _limb_matrix(a, b, a2, b2) -> np.ndarray:
+    """A limb onto its frame bone: turned, and shortened or lengthened along its length only, so a limb pointing
+    toward the viewer (foreshortened, 3/4 view) keeps its width (owner, 2026-10-31: a leg looked shrunk next to the
+    other)."""
+    v1, v2 = np.subtract(b, a, dtype=float), np.subtract(b2, a2, dtype=float)
+    l1, l2 = float(np.linalg.norm(v1)) + 1e-6, float(np.linalg.norm(v2)) + 1e-6
+    s = float(np.clip(l2 / l1, LIMB_SHORTEST, 1.25))
+    u1, u2 = v1 / l1, v2 / l2
+    n1, n2 = np.array([-u1[1], u1[0]]), np.array([-u2[1], u2[0]])
+    m = np.zeros((2, 3))
+    m[:, :2] = s * np.outer(u2, u1) + np.outer(n2, n1)
+    m[:, 2] = np.asarray(a2, float) - m[:, :2] @ np.asarray(a, float)
+    return m
 
 
 def _head_matrix(a, b, a2, b2) -> np.ndarray:

@@ -132,3 +132,23 @@ def test_flipping_the_facing_keeps_the_owners_angle(session, hero):
     session.set_angle("34")                                   # chosen before the skeleton is confirmed
     ch = session.set_character(str(hero), "left")
     assert ch.angle == "34" and ch.angle_source == "owner"
+
+
+def test_two_hands_on_one_weapon_stay_together():
+    from animgen.skeleton import LWRI, RWRI
+    for tid in ("a3", "a4"):
+        for fr in load_template(tid, angle="34").frames:
+            r, l = fr.skeleton.points[RWRI], fr.skeleton.points[LWRI]
+            assert math.dist(r, l) < 0.2, tid                       # on one handle (the side poses' gap)
+
+
+def test_the_bow_keeps_fists_in_three_quarter_view():
+    assert not any(fr.open_hands for fr in load_template("a5", angle="34").frames)
+
+
+def test_a_foreshortened_limb_keeps_its_width():
+    import numpy as np
+    from animgen.rig import _limb_matrix
+    m = _limb_matrix((0, 0), (0, 100), (0, 0), (0, 60))           # the bone drawn at 60 % of its length
+    assert np.allclose(m[:, :2] @ np.array([10.0, 0.0]), [10.0, 0.0])   # across: unchanged
+    assert np.allclose(m[:, :2] @ np.array([0.0, 100.0]), [0.0, 60.0])  # along: shortened
