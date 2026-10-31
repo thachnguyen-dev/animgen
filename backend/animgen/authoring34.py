@@ -16,7 +16,8 @@ swing turned and foreshortened. What a side view cannot show is added in 3D, fro
   body, "back": meshes drawn behind it). The far arm always stays behind the body (owner, 2026-10-31: it looked
   wrong in front of it);
 - a kick swings across the picture rather than toward the viewer, so the leg keeps its length and reach, and the
-  bow is drawn level across the picture, not back into it (owner, 2026-10-31);
+  bow is drawn level across the picture, not back into it (owner, 2026-10-31); the far arm always stays behind
+  the body except on a two-handed grip, where it is drawn over the head and body;
 - two hands on one weapon stay together: the far hand is put on the handle next to the near one in 3D and its arm
   solved to reach it (owner, 2026-10-31: in a 3/4 view each arm swinging from its own shoulder pulls them apart),
   and the spear's near (right) hand leads, its arm reaching forward, the far hand behind it on the shaft.
@@ -77,6 +78,8 @@ class Pose3:
     l_leg_out: float | None = None
     joined: bool = False             # both hands on one handle: the far hand goes next to the near one
     far_behind: bool = False         # joined: the far hand on the handle behind the near one (toward the body)
+    near_elbow_forward: bool = False # the near elbow bent forward of the shoulder and the hand (a two-handed grip)
+    far_arm_front: bool = False      # the far arm drawn over the head and the body (a two-handed grip)
 
 
 def _rot_y(v: tuple, deg: float) -> tuple:
@@ -159,6 +162,19 @@ def solve3(p3: Pose3) -> tuple[list, bool, list, list]:
         pts3[sho] = _add(neck, _rot_y((0.0, SHO_DROP, sign * SHO_HALF), chest))
         pts3[elb] = _add(pts3[sho], _scale(_rot_y(_dir(sh, out, sign), chest), UPPER_ARM))
         pts3[wri] = _add(pts3[elb], _scale(_rot_y(_dir(sh + el, out + fout, sign), chest), FOREARM))
+    if p3.near_elbow_forward:
+        # The elbow out in front of both the shoulder and the hand (in the picture): the hands, with the weapon,
+        # move the least distance forward or back that allows it.
+        pole = _rot_y(NEAR_POLE_FORWARD, chest)
+        best = None
+        for off in sorted((k * 0.01 for k in range(-25, 26)), key=abs):
+            target = _add(pts3[RWRI], _rot_y((off, 0.0, 0.0), chest))
+            elbow, wrist = _reach3(pts3[RSHO], target, pole)
+            ex, sx, wx = project(elbow)[0], project(pts3[RSHO])[0], project(wrist)[0]
+            if ex > sx + ELBOW_LEAD and ex > wx + ELBOW_LEAD:
+                best = (elbow, wrist)
+                break
+        pts3[RELB], pts3[RWRI] = best or _reach3(pts3[RSHO], pts3[RWRI], pole)
     if p3.joined:
         # The handle runs from the near hand to the far one as in the side pose, in the body's forward-down plane.
         sp = _side_points(p)
@@ -185,14 +201,18 @@ def solve3(p3: Pose3) -> tuple[list, bool, list, list]:
 
     front, back = [], []
     body = depth[NECK]
+    if p3.far_arm_front:
+        front.append("arm_far")
     if (depth[LKNE] + depth[LANK]) / 2 > (depth[RKNE] + depth[RANK]) / 2:
         front.append("leg_far")
-    if (depth[RELB] + depth[RWRI]) / 2 < body - DEPTH_MARGIN:
+    if (depth[RELB] + depth[RWRI]) / 2 < body - DEPTH_MARGIN and not p3.joined:     # a grip stays in front
         back.append("arm")
     return pts, p.lift <= 0.0, front, back
 
 
 FAR_POLE = (-0.2, 1.0, -0.6)   # the far elbow of a two-handed grip bends down, out and a little back
+NEAR_POLE_FORWARD = (1.0, 0.25, 0.3)   # the near elbow of a two-handed grip points forward (owner, 2026-10-31)
+ELBOW_LEAD = 0.01     # template units: how far the elbow is at least in front of the shoulder and the hand
 
 
 def _reach3(shoulder: tuple, target: tuple, pole: tuple) -> tuple[tuple, tuple]:
@@ -240,14 +260,16 @@ TWEAKS: dict[str, dict[int, dict]] = {
             4: dict(r_leg_out=KICK_ACROSS, hips=8.0, base_r_hip=102.0),
             5: dict(r_leg_out=KICK_ACROSS / 2, hips=4.0)},
     # Two hands on one grip: the near shoulder back, the chest turned toward profile so both arms reach the hilt.
-    "a3": {i: dict(chest=-18.0, joined=True) for i in range(8)},
+    # The near elbow always forward of the shoulder and the hand, the far arm over the head and body (owner,
+    # 2026-10-31).
+    "a3": {i: dict(chest=-18.0, joined=True, near_elbow_forward=True, far_arm_front=True) for i in range(8)},
     "a4": {i: dict(joined=True, far_behind=True, chest=SPEAR_TURN, r_out=SPEAR_ACROSS) for i in range(8)},
     # The bow: the body side-on to the shot, the draw hand pulling level across the picture; the hands stay fists
     # (owner, 2026-10-31).
     "a5": {i: dict(chest=BOW_TURN, hips=BOW_TURN / 3, head=BOW_TURN * 0.6, base_open=()) for i in range(8)},
 }
-SPEAR_REACH = 0.12    # the spear's near hand this much further forward than in the side view, the arm reaching out
-SPEAR_LEAST = 0.13    # and never closer in than this: drawn back, the body pulls back, the arm stays out front
+SPEAR_REACH = 0.03    # the spear's near hand this much further forward than in the side view (owner, 2026-10-31:
+SPEAR_LEAST = 0.05    # further back than the first try), and never closer in than this
 
 
 def poses34(tid: str) -> list[Pose3]:

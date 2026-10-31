@@ -72,9 +72,19 @@ def test_a_slash_winds_the_chest_back_and_swings_it_through():
 
 
 def test_the_far_arm_always_stays_behind_the_body():
-    # Owner, 2026-10-31: even reaching forward (A7 casts with the far hand) it is drawn behind the body.
+    # Owner, 2026-10-31: even reaching forward (A7 casts with the far hand) it is drawn behind the body; only on
+    # the two-handed grip (A3) is it drawn over the head and body, in every frame.
     for tid in READY:
-        assert not any("arm_far" in fr.front for fr in load_template(tid, angle="34").frames), tid
+        fronts = ["arm_far" in fr.front for fr in load_template(tid, angle="34").frames]
+        assert all(fronts) if tid == "a3" else not any(fronts), tid
+
+
+def test_the_two_handed_near_elbow_leads():
+    from animgen.skeleton import RELB, RSHO, RWRI
+    for fr in load_template("a3", angle="34").frames:
+        p = fr.skeleton.points
+        assert p[RELB][0] > max(p[RSHO][0], p[RWRI][0])             # forward of both the shoulder and the hand
+        assert "arm" not in fr.back
 
 
 def test_the_kick_keeps_its_length_and_the_bow_draws_level():

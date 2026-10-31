@@ -386,6 +386,11 @@ pose recognition is ineffective or too expensive. **Decided (changeable):**
   spear's right hand leads with the arm extended forward and the left hand behind it on the shaft; the bow keeps
   fists (no open hand); a limb pointing toward the viewer is shortened along its length only and keeps its width
   (a leg looked enlarged next to the shrunk other one).
+- Third round (owner, 2026-10-31): on the two-handed weapon (A3) the right elbow is always in front of both the
+  right shoulder and the hand (the hands, with the weapon, shift the least distance that allows it) and the left
+  arm is drawn over the head and body in every frame (it used to vanish behind the body in 5 of 8); on the spear
+  (A4) the right arm sits further back throughout (the near hand only 0.03 ahead of the side pose, at least 0.05
+  from the shoulder) and is never put behind the body.
 - Test character: dev/tools/shape_character.py --view 34 (drawn from the same 3D body) renders all animations to
   D:/Game/ainm/pose_test_34.
 
