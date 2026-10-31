@@ -443,7 +443,7 @@ hand next to it), in a separate window. ImageViewerWindow opens from a click on 
 khung" (fits the drawn part of the picture, not the whole square canvas) / 100 % / 200 % / 400 %; from 200 % the
 pixels are drawn sharp (nearest neighbour) so the edges of each part can be judged.
 
-## Squash/stretch, part sizes and bends (owner, 2026-10-31) — owner request Confirmed, default values Proposed
+## Squash/stretch, part sizes and bends (owner, 2026-10-31) — Confirmed (owner approved, no further changes)
 
 The owner asked whether posing could change sizes or deform slightly, chose all three proposed features, and asked
 for them on every built-in pose in both views ("Applied to all views, all poses").
