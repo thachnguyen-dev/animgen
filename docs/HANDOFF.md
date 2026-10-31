@@ -1,7 +1,28 @@
-# Handoff — local finalisation (2026-10-30, resumed)
+# Handoff
 
-Paused at the owner's request, then resumed the same day. This page says where the work stands, what was verified on the owner's PC, and what
-comes next, so a later session (on the PC or in the cloud) can pick it up. Decisions are in `DECISIONS.md`.
+This page says where the work stands and what comes next, so a later session (on the PC or in the cloud) can pick it
+up. Decisions are in `DECISIONS.md`. The dated sections further down are the history, oldest first.
+
+## Current state (2026-10-31)
+
+- Method: layered cut-out rig per character image (no AI per frame). Step 1 character + skeleton + view (side or
+  3/4); step 2 part map from the owner's image -> Photoshop -> "Vẽ phần bị che"; step 3 animation; step 4 generate
+  in seconds (optional "Hoàn thiện bằng AI", ~25 s per frame); step 5 export PNG + sprite sheet + hand anchors.
+- Poses: 20 side-view animations (owner feedback applied; still marked Proposed in DECISIONS.md) and the 3/4 set,
+  Confirmed by the owner without A3 (two-handed weapon has no 3/4 version).
+- Pose editor (998de23), tested and accepted by the owner 2026-10-31: the owner poses a sample character in 8
+  frames and saves it as an animation for that view (<data>/poses/u_*.json).
+- Published to C:/AnimGen after every change (publish only with the app closed).
+
+## Next steps
+
+1. **Owner's own character art (needs the owner):** run the whole flow on a real side-view and a 3/4 character;
+   fix what shows. Known flaw on test art: the knight's cape hem landed in the far-shin layer.
+2. **Owner confirmation:** the side-view pose set is still Proposed; mark it Confirmed when the owner says so.
+3. **Known defects:** specks along the head outline in some frames; with the AI finishing pass, the model can
+   still swap left and right limbs (see "Left/right accuracy").
+4. **Optional, not built:** pose editor keyboard moves, undo, per-frame weapon direction; rig step options C (parts
+   from an earlier draw) and D (fallback without AI).
 
 ## Owner's PC (verified)
 
@@ -42,15 +63,14 @@ recommendation (separate vs combined) after testing.
    correctly and detected the facing; Generate Idle 8 frames in 342 s (model load ~20 s); export 256 px wrote 8 PNGs
    and the sprite sheet; the backend ended with the app.
 
-## Next steps
+## Next steps at that time (superseded by "Next steps" at the top)
 
-1. **GPU, when the owner has separated art:** Phase 0 on it; judge the skeleton pre-fill (DWPose) on the owner's
-   style, consistency and line weight; tune with `dev/tools/ab_run.py` + `dev/tools/ab_sheet.py`.
-2. **Code only:** puppet improvements with tests (`tests/test_puppet.py`).
+1. GPU, when the owner has separated art: Phase 0 on it; judge the skeleton pre-fill (DWPose).
+2. Code only: puppet improvements with tests (`tests/test_puppet.py`).
 
 ## Notes for a cloud session
 
-No GPU there: the real engine, Phase 0 and all tuning need the owner's PC. Code-only work (step 3 of Next steps) and the test
+No GPU there: the real engine, the rig and part drawing and all tuning need the owner's PC. Code-only work and the test
 suite (`backend/requirements-dev.txt`, `pytest`) run anywhere. Keep CRLF line endings and UTF-8 with BOM for
 PowerShell scripts.
 
@@ -106,4 +126,6 @@ PowerShell scripts.
   /rig/rebuild, /rig/map; RigInfo.Stage in the app; step 2 shows the map, "Vẽ phần bị che", "Tách lại",
   "Về bản đồ".
 - Three-quarter pose set (DECISIONS.md "Three-quarter view pose set"): authoring34.py ->
-  template_data/view34 and docs/templates/view34; POST /character/angle; step 1 "Đổi góc nhìn".
+  template_data/view34 and docs/templates/view34; POST /character/angle; step 1 "Đổi góc nhìn". Four owner
+  rounds; confirmed 2026-10-31 without A3 (2dacc61, the animation list follows the character's view).
+- Pose editor (998de23, DECISIONS.md "Pose editor"): animgen/poses.py + sample.py, PoseEditorWindow, /poses routes.

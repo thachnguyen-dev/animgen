@@ -3,7 +3,8 @@ background removed with the app's own ToonOut remover.
 
 usage: python make_temp_art.py <out_dir> <job> [seeds...]
 jobs: hero (no weapon), hero_sword (combined), sword, bow; western set like the owner's old art: knight, archer,
-      archer34 (three-quarter view), mage, staff
+      archer34 (three-quarter view), mage, staff; anime chibi three-quarter view (owner, 2026-10-31: tactics-RPG
+      style, nearly front-facing, moving sideways): chibi_sword, chibi_mage
 """
 import sys
 import time
@@ -25,6 +26,8 @@ CHAR = ("1boy, solo, full body, standing, from side, profile, facing right, youn
         "western cartoon, game sprite, ")
 WEST = ("1man, solo, adult, full body, standing, from side, profile, facing right, arms at sides, western, realistic, "
         "semi-realistic, game art, detailed, thick outlines, ")
+CHIBI = ("solo, chibi, full body, standing, three-quarter view, body turned toward viewer, facing right, looking "
+         "right, arms at sides, anime, game sprite, tactics rpg unit, thick outlines, cel shading, ")
 EMPTY = "empty hands, simple background, white background, " + Q
 NEG_EMPTY = NEG + ", weapon, sword, holding, holding weapon, bow, staff, shield, anime, chibi"
 JOBS = {
@@ -44,6 +47,10 @@ JOBS = {
                "leather boots, " + EMPTY, NEG_EMPTY, (832, 1216)),
     "archer34": (WEST.replace("from side, profile, ", "three-quarter view, ") + "archer, beard, short black hair, "
                  "green tunic, brown leather armor, quiver on back, belt, leather boots, " + EMPTY, NEG_EMPTY, (832, 1216)),
+    "chibi_sword": (CHIBI + "swordswoman, long red hair, ponytail, silver breastplate, blue skirt, red cape, gloves, "
+                    "armored boots, " + EMPTY, NEG_EMPTY.replace(", chibi", ""), (832, 1216)),
+    "chibi_mage": (CHIBI + "boy, mage, short silver hair, wizard hat, purple robe, long sleeves, belt, boots, " + EMPTY,
+                   NEG_EMPTY.replace(", chibi", ""), (832, 1216)),
     "mage": (WEST + "old wizard, long white beard, long blue robe, hood down, sash, " + EMPTY, NEG_EMPTY, (832, 1216)),
     "staff": ("no humans, wooden staff, magic staff, wizard staff, crystal on top, vertical, side view, object focus, "
               "simple background, white background, game asset, " + Q, NEG + ", 1boy, 1girl, hand, holding",
