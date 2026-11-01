@@ -185,7 +185,7 @@ def test_every_ready_animation_has_a_pose_picture(server):
         st, pv = call(server, "GET", f"/animations/{tid}/preview")
         assert st == 200, tid
         with Image.open(pv["image"]) as im:
-            assert im.size == (640, 320), tid                  # 4 x 2 frames of 160
+            assert im.size == (960, 480), tid                  # 4 x 2 frames of 240, cut apart by the app
             assert im.convert("L").getextrema()[1] > 0, tid    # something is drawn
     st, err = call(server, "GET", "/animations/nope/preview")
     assert st == 400 and err["error"]["code"] == "bad_request"

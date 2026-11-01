@@ -18,8 +18,9 @@ GROUND = (90, 90, 90)
 NUMBER = (170, 170, 170)
 
 
-def draw(tpl: MotionTemplate, cell: int = 160) -> Image.Image:
-    """The template's frames in reading order, a ground line under each, numbered from 1."""
+def draw(tpl: MotionTemplate, cell: int = 240) -> Image.Image:
+    """The template's frames in reading order, a ground line under each, numbered from 1. The app plays them as a
+    loop (it cuts the picture into square frames of ``cell``), so a frame is big enough to be shown alone."""
     rows = (len(tpl.frames) + COLUMNS - 1) // COLUMNS
     pts = [p for fr in tpl.frames for p in fr.skeleton.points if p is not None]
     x0, x1 = min(p[0] for p in pts), max(p[0] for p in pts)
@@ -31,9 +32,9 @@ def draw(tpl: MotionTemplate, cell: int = 160) -> Image.Image:
     sheet = np.zeros((cell * rows, cell * COLUMNS, 3), np.uint8)
     for i, fr in enumerate(tpl.frames):
         moved = [None if p is None else (p[0] * scale + ox, p[1] * scale + oy) for p in fr.skeleton.points]
-        img = draw_openpose(Skeleton(moved), (cell, cell), stick_width=3)
+        img = draw_openpose(Skeleton(moved), (cell, cell), stick_width=round(3 * cell / 160))
         cv2.line(img, (0, ground), (cell, ground), GROUND, 1)
-        cv2.putText(img, str(i + 1), (6, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, NUMBER, 1, cv2.LINE_AA)
+        cv2.putText(img, str(i + 1), (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.45 * cell / 160, NUMBER, 1, cv2.LINE_AA)
         r, c = divmod(i, COLUMNS)
         sheet[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell] = img
     for c in range(1, COLUMNS):                          # a thin line between the frames

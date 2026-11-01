@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using AnimGen.Services;
 using Microsoft.Win32;
@@ -59,6 +60,9 @@ public sealed class MainViewModel : ObservableObject
     {
         _player = new DispatcherTimer(DispatcherPriority.Render);
         _player.Tick += (_, _) => NextPlayFrame();
+        _poseTimer = new DispatcherTimer(DispatcherPriority.Render);
+        _poseTimer.Tick += (_, _) => NextPoseFrame();
+        TogglePoseCommand = new RelayCommand(_ => TogglePosePlay(), _ => _poseFrames.Count > 0);
         for (int i = 1; i <= 8; i++) Frames.Add(new FrameItem(i));
 
         ChooseCharacterCommand = new AsyncCommand(_ => ChooseCharacterAsync(), OnError, _ => Ready && !IsBusy);
@@ -269,7 +273,70 @@ public sealed class MainViewModel : ObservableObject
                 image = null;                          // a missing picture never blocks choosing the animation
             }
         }
-        if (ReferenceEquals(animation, _selectedAnimation)) PoseImage = image;   // the choice may have moved on
+        if (ReferenceEquals(animation, _selectedAnimation)) ShowPoseImage(image);   // the choice may have moved on
+    }
+
+    // The same 8 poses played as a loop (owner, 2026-11-01): the picture is cut into its square frames, shown one
+    // after the other at the preview speed. It starts by itself and can be stopped.
+    private readonly DispatcherTimer _poseTimer;
+    private readonly List<ImageSource> _poseFrames = new();
+    private int _poseIndex;
+
+    private ImageSource? _poseLive;
+    public ImageSource? PoseLive { get => _poseLive; private set => Set(ref _poseLive, value); }
+
+    private bool _posePlaying;
+    public bool PosePlaying { get => _posePlaying; private set => Set(ref _posePlaying, value); }
+
+    public ICommand TogglePoseCommand { get; }
+
+    private void ShowPoseImage(ImageSource? image)
+    {
+        _poseTimer.Stop();
+        PosePlaying = false;
+        _poseFrames.Clear();
+        PoseImage = image;
+        if (image is BitmapSource sheet && sheet.PixelWidth >= 4)
+        {
+            int cell = sheet.PixelWidth / 4;                  // 4 frames to a row
+            for (int r = 0; (r + 1) * cell <= sheet.PixelHeight; r++)
+                for (int c = 0; c < 4; c++)
+                {
+                    var frame = new CroppedBitmap(sheet, new System.Windows.Int32Rect(c * cell, r * cell, cell, cell));
+                    frame.Freeze();
+                    _poseFrames.Add(frame);
+                }
+        }
+        _poseIndex = 0;
+        PoseLive = _poseFrames.FirstOrDefault();
+        if (_poseFrames.Count > 0) StartPosePlay();
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private void TogglePosePlay()
+    {
+        if (PosePlaying) StopPosePlay();
+        else StartPosePlay();
+    }
+
+    private void StartPosePlay()
+    {
+        _poseTimer.Interval = TimeSpan.FromMilliseconds(1000.0 / Math.Max(1, Fps));
+        PosePlaying = true;
+        _poseTimer.Start();
+    }
+
+    private void StopPosePlay()
+    {
+        _poseTimer.Stop();
+        PosePlaying = false;
+    }
+
+    private void NextPoseFrame()
+    {
+        if (_poseFrames.Count == 0) return;
+        _poseIndex = (_poseIndex + 1) % _poseFrames.Count;
+        PoseLive = _poseFrames[_poseIndex];
     }
 
     /// <summary>The app draws characters only; weapons are attached in the game (owner, 2026-10-30). Where the
@@ -318,7 +385,10 @@ public sealed class MainViewModel : ObservableObject
         get => _fps;
         set
         {
-            if (Set(ref _fps, value)) _player.Interval = TimeSpan.FromMilliseconds(1000.0 / Math.Max(1, value));
+            if (Set(ref _fps, value))
+            {
+                _player.Interval = _poseTimer.Interval = TimeSpan.FromMilliseconds(1000.0 / Math.Max(1, value));
+            }
         }
     }
 

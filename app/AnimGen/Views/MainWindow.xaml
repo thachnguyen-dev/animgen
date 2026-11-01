@@ -259,6 +259,43 @@
                             </ComboBox>
                             <!-- The animation's 8 poses, drawn from its template (owner, 2026-11-01) -->
                             <StackPanel Visibility="{Binding HasPoseImage, Converter={StaticResource BoolToVis}}">
+                                <!-- The same poses played as a loop, at the preview speed (owner, 2026-11-01) -->
+                                <StackPanel Orientation="Horizontal" Margin="{StaticResource SpaceGap}">
+                                    <Border BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceRight}">
+                                        <Image Source="{Binding PoseLive}" Stretch="Uniform" Height="{StaticResource SizeThumb}"
+                                               Width="{StaticResource SizeThumb}" RenderOptions.BitmapScalingMode="HighQuality"
+                                               AutomationProperties.Name="Hoạt ảnh đang phát"/>
+                                    </Border>
+                                    <Button Command="{Binding TogglePoseCommand}" Padding="8,4" VerticalAlignment="Bottom"
+                                            AutomationProperties.Name="Phát hoặc dừng hoạt ảnh mẫu">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock>
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource TextIcon}">
+                                                        <Setter Property="Text" Value="{StaticResource GlyphPlay}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding PosePlaying}" Value="True">
+                                                                <Setter Property="Text" Value="{StaticResource GlyphPause}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                            <TextBlock>
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                                        <Setter Property="Text" Value="Phát"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding PosePlaying}" Value="True">
+                                                                <Setter Property="Text" Value="Dừng"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
                                 <Border BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}"
                                         Cursor="Hand" ToolTip="Bấm để xem phóng to" MouseLeftButtonUp="ZoomPose_Click">
                                     <Image Source="{Binding PoseImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
