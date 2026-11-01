@@ -476,6 +476,9 @@ application so each animation can be seen before it is chosen.
 - One scale and one ground line per animation (fitted to its whole movement), so frames can be compared; the sheets'
   English labels are left out. Skeleton only: no weapon lines (weapons are attached in the game) and no shapes.
 - Not shown for an animation that cannot be made in this view; a failed picture never blocks choosing.
+- The same poses also play as a live loop (owner, 2026-11-01, chose the stick-figure loop over a moving sample
+  character): the app cuts the picture into its 8 square frames and shows them one after the other at the preview
+  speed (the Tốc độ choice of the preview), starting by itself, with a Phát/Dừng button.
 
 ## Not done on purpose
 
