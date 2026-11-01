@@ -176,6 +176,21 @@ def test_input_error_over_http(server, tmp_path):
     assert st == 400 and err["error"]["code"] == "input_checkerboard"
 
 
+def test_every_ready_animation_has_a_pose_picture(server):
+    from PIL import Image
+    st, anims = call(server, "GET", "/animations")
+    ready = [a["id"] for a in anims if a["ready"]]
+    assert ready
+    for tid in ready:
+        st, pv = call(server, "GET", f"/animations/{tid}/preview")
+        assert st == 200, tid
+        with Image.open(pv["image"]) as im:
+            assert im.size == (640, 320), tid                  # 4 x 2 frames of 160
+            assert im.convert("L").getextrema()[1] > 0, tid    # something is drawn
+    st, err = call(server, "GET", "/animations/nope/preview")
+    assert st == 400 and err["error"]["code"] == "bad_request"
+
+
 def test_pose_editor_routes(server):
     st, r = call(server, "POST", "/poses/start", {"angle": "side", "from": "walk"})
     assert st == 200 and len(r["frames"]) == 8 and r["sample"]["width"] > 0
@@ -187,6 +202,8 @@ def test_pose_editor_routes(server):
     assert [x["id"] for x in lst] == [saved["id"]]
     st, anims = call(server, "GET", "/animations")
     assert saved["id"] in {a["id"] for a in anims if a["ready"]}
+    st, pv = call(server, "GET", f"/animations/{saved['id']}/preview")      # the owner's own pose has one too
+    assert st == 200 and Path(pv["image"]).is_file()
     st, _ = call(server, "POST", "/poses/delete", {"id": saved["id"]})
     assert st == 200 and call(server, "GET", "/poses")[1] == []
     st, err = call(server, "POST", "/poses/save", {"angle": "side", "name": "", "frames": r["frames"]})

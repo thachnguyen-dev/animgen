@@ -257,6 +257,16 @@
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
+                            <!-- The animation's 8 poses, drawn from its template (owner, 2026-11-01) -->
+                            <StackPanel Visibility="{Binding HasPoseImage, Converter={StaticResource BoolToVis}}">
+                                <Border BorderBrush="{StaticResource BrushBorder}" BorderThickness="1" Margin="{StaticResource SpaceGap}"
+                                        Cursor="Hand" ToolTip="Bấm để xem phóng to" MouseLeftButtonUp="ZoomPose_Click">
+                                    <Image Source="{Binding PoseImage}" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                                           AutomationProperties.Name="{Binding PoseImageName}"/>
+                                </Border>
+                                <Button Content="Phóng to…" Click="ZoomPose_Click" HorizontalAlignment="Left" Padding="8,4"
+                                        AutomationProperties.Name="{Binding PoseImageName, StringFormat='Phóng to {0}'}"/>
+                            </StackPanel>
                             <TextBlock Text="{Binding AnimationNote}" Style="{StaticResource TextMuted}" Margin="{StaticResource SpaceGap}"/>
                             <!-- The owner's own poses (pose editor, owner 2026-10-31) -->
                             <WrapPanel Margin="{StaticResource SpaceGap}">

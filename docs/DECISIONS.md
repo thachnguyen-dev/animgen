@@ -464,6 +464,19 @@ for them on every built-in pose in both views ("Applied to all views, all poses"
 - Pose editor: a "Biến dạng khung N" panel with a choice per value (fixed steps; a pose's own value is shown even
   when it is not a step). Saved poses carry only the values that were changed.
 
+## Pose pictures in the animation list (owner, 2026-11-01) — owner request Confirmed, design mine
+
+The owner asked for the pose pictures generated earlier (the contact sheets in `docs/templates`) to be shown in the
+application so each animation can be seen before it is chosen.
+- Step 3 shows one picture under the animation choice: its 8 poses, 4 to a row, numbered, on one ground line;
+  clicking it or "Phóng to…" opens it larger (as the step-2 pictures do).
+- The picture is drawn by the backend (`pose_preview.py`, `GET /animations/<id>/preview`) with the same skeleton
+  drawing as the contact sheets, from the template as it is now. The old sheet files are not shipped: they date from
+  before the shapes work and would drift from the real poses; the owner's own poses get a picture the same way.
+- One scale and one ground line per animation (fitted to its whole movement), so frames can be compared; the sheets'
+  English labels are left out. Skeleton only: no weapon lines (weapons are attached in the game) and no shapes.
+- Not shown for an animation that cannot be made in this view; a failed picture never blocks choosing.
+
 ## Not done on purpose
 
 - No free-form prompts, no batch generation, no automatic quality scoring, no Unity configuration files, no

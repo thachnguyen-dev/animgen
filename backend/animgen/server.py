@@ -10,6 +10,7 @@
 Routes (all JSON):
   GET  /health                         -> {ok, engine, demo, version}
   GET  /animations                     -> [{id, name_vi, ready, grip, weapon_kinds, status}]
+  GET  /animations/<id>/preview        -> {image}: the animation's 8 poses in one picture (4 per row)
   GET  /state                          -> session state (frames, previews, candidates, ...)
   POST /character {path, facing?, name?}
   POST /character/angle {angle}       -> {character, state}  ("side" | "34": which pose set the character uses)
@@ -51,7 +52,8 @@ from .errors import AppError
 from .session import Session
 from .tasks import TaskRunner
 from .poses import PoseEditor
-from .templates import available
+from . import pose_preview
+from .templates import available, load_template
 
 
 def plain(value: Any) -> Any:
@@ -85,6 +87,20 @@ class App:
         self.runner = TaskRunner()
         self.shutdown_requested = threading.Event()
 
+    def animation_preview(self, tid: str) -> dict:
+        """The picture of an animation's 8 poses (owner, 2026-11-01), drawn from its template as it is now and kept
+        in one file per animation and view, so the folder never grows."""
+        angle = self.session.character.angle if self.session.character else "side"
+        try:
+            tpl = load_template(tid, angle=angle)
+        except (FileNotFoundError, ValueError):
+            raise AppError("bad_request", detail="unknown animation") from None
+        folder = self.session.data_dir / "pose_previews"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{angle}_{tid}.png"
+        pose_preview.draw(tpl).save(path)
+        return {"image": str(path)}
+
     # Each handler returns (status, body)
     def route(self, method: str, path: str, body: dict) -> tuple[int, Any]:
         s = self.session
@@ -96,6 +112,8 @@ class App:
                 return 200, self.poses.list()
             if parts == ["animations"]:
                 return 200, available(s.character.angle if s.character else "side")
+            if len(parts) == 3 and parts[0] == "animations" and parts[2] == "preview":
+                return 200, self.animation_preview(parts[1])
             if parts == ["state"]:
                 return 200, s.state()
             if len(parts) == 2 and parts[0] == "tasks":

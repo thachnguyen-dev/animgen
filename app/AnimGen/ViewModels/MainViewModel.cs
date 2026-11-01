@@ -238,8 +238,38 @@ public sealed class MainViewModel : ObservableObject
                 Raise(nameof(ShowGrip));
                 Raise(nameof(CanGenerate));
                 Raise(nameof(AnimationNote));
+                Raise(nameof(PoseImageName));
+                _ = LoadPoseImageAsync(value);
             }
         }
+    }
+
+    /// <summary>The animation's 8 poses in one picture (owner, 2026-11-01), drawn by the backend from the template
+    /// as it is now. Nothing is shown for an animation that cannot be made.</summary>
+    private ImageSource? _poseImage;
+    public ImageSource? PoseImage
+    {
+        get => _poseImage;
+        private set { if (Set(ref _poseImage, value)) Raise(nameof(HasPoseImage)); }
+    }
+    public bool HasPoseImage => _poseImage != null;
+    public string PoseImageName => SelectedAnimation is { } a ? $"Các tư thế của {a.NameVi}" : "Các tư thế";
+
+    private async Task LoadPoseImageAsync(AnimationInfo? animation)
+    {
+        ImageSource? image = null;
+        if (_api != null && animation is { Ready: true })
+        {
+            try
+            {
+                image = FrameItem.Load((await _api.AnimationPreviewAsync(animation.Id)).Image);
+            }
+            catch (Exception)
+            {
+                image = null;                          // a missing picture never blocks choosing the animation
+            }
+        }
+        if (ReferenceEquals(animation, _selectedAnimation)) PoseImage = image;   // the choice may have moved on
     }
 
     /// <summary>The app draws characters only; weapons are attached in the game (owner, 2026-10-30). Where the

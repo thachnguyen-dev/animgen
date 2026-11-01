@@ -24,6 +24,8 @@ public partial class MainWindow : Window
 
     private void ZoomHand_Click(object sender, RoutedEventArgs e) => ShowZoomed(Vm.HandImage, "Bàn tay mở");
 
+    private void ZoomPose_Click(object sender, RoutedEventArgs e) => ShowZoomed(Vm.PoseImage, Vm.PoseImageName);
+
     private void ShowZoomed(System.Windows.Media.ImageSource? image, string title)
     {
         if (image == null) return;

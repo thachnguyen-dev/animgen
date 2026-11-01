@@ -99,6 +99,12 @@ public sealed class PoseShape
     public Dictionary<string, double> Bend { get; set; } = new();    // degrees: torso, arm_r, arm_l, leg_r, leg_l
 }
 
+/// <summary>The picture of an animation's 8 poses, 4 to a row (owner, 2026-11-01).</summary>
+public sealed class PosePreviewReply
+{
+    public string Image { get; set; } = "";
+}
+
 public sealed class PoseEditReply
 {
     public PoseSample Sample { get; set; } = new();

@@ -37,6 +37,8 @@ public sealed class BackendClient : IDisposable
 
     public Task<HealthReply> HealthAsync() => GetAsync<HealthReply>("health");
     public Task<List<AnimationInfo>> AnimationsAsync() => GetAsync<List<AnimationInfo>>("animations");
+    public Task<PosePreviewReply> AnimationPreviewAsync(string id) =>
+        GetAsync<PosePreviewReply>($"animations/{Uri.EscapeDataString(id)}/preview");
     public Task<SessionState> StateAsync() => GetAsync<SessionState>("state");
     public Task<TaskInfo> TaskAsync(string id) => GetAsync<TaskInfo>($"tasks/{id}");
 
